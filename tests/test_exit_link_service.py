@@ -170,6 +170,20 @@ def run(coro):
 
 
 class LinkTests(unittest.TestCase):
+    def test_monitor_switches_to_the_next_configured_exit(self):
+        h = Harness()
+        run(h.service.link(0, 'awg2', 'exit-a', fallback_uids=['exit-b']))
+        h.awg().status_sequence = [
+            {'up': False, 'handshake_age': None, 'rx_bytes': 0, 'tx_bytes': 0, 'endpoint': ''}
+        ]
+
+        run(h.service.monitor_failover())
+
+        link = h.record()['exit_link']
+        self.assertEqual(link['exit_uid'], 'exit-b')
+        self.assertEqual(link['priority_uids'], ['exit-a', 'exit-b'])
+        self.assertEqual([event for event in h.events if event[1] == 'add_peer'][-1][0], '203.0.113.9')
+
     def test_happy_path_persists_the_link(self):
         h = Harness()
         result = run(h.service.link(0, 'awg2', 'exit-a'))
