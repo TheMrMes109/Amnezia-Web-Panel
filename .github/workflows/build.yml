@@ -16,7 +16,7 @@ env:
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -84,7 +84,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/BW' || startsWith(github.ref, 'refs/tags/v')
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/BW' || startsWith(github.ref, 'refs/tags/v')
 
     permissions:
       contents: read
@@ -152,7 +152,7 @@ jobs:
           org.opencontainers.image.description=Web panel for managing Amnezia VPN servers
 
     - name: Build and push
-      if: (matrix.variant == 'bw' && github.ref == 'refs/heads/BW') || (matrix.variant != 'bw' && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
+      if: (matrix.variant == 'bw' && github.ref == 'refs/heads/BW') || (matrix.variant != 'bw' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
       uses: docker/build-push-action@v6
       with:
         context: .
