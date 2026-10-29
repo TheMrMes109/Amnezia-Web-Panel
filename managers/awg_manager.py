@@ -1412,8 +1412,9 @@ done
         # start.sh runs. Existing installations are handled by the panel's
         # global WARP egress action.
         self.ssh.run_sudo_command(
-            f"docker network inspect amnezia-warp-net >/dev/null 2>&1 && "
-            f"docker network connect amnezia-warp-net {container_name} >/dev/null 2>&1 || true"
+            f"if docker network inspect amnezia-warp-net >/dev/null 2>&1; then "
+            f"docker network connect amnezia-warp-net {container_name} >/dev/null 2>&1 || true; "
+            f"docker exec {container_name} sh -c 'touch /opt/amnezia/warp-egress.enabled'; fi"
         )
 
         # Wait for container to be fully running
@@ -1817,6 +1818,17 @@ fi
             '      while ip -6 rule del priority 210 from "$SUBNET6" prohibit 2>/dev/null; do :; done\n'
             '      ip -6 rule add priority 210 from "$SUBNET6" prohibit\n'
             '    fi\n'
+            '  else\n'
+            '    while ip -6 rule del priority 210 iif "$IFACE" prohibit 2>/dev/null; do :; done\n'
+            '    ip -6 rule add priority 210 iif "$IFACE" prohibit\n'
+            '  fi\n'
+            'elif [ -f /opt/amnezia/warp-egress.enabled ]; then\n'
+            '  # WARP was enabled but its transit interface vanished: fail closed.\n'
+            '  while ip -4 rule del priority 210 from "$SUBNET" prohibit 2>/dev/null; do :; done\n'
+            '  ip -4 rule add priority 210 from "$SUBNET" prohibit\n'
+            '  if [ -n "$SUBNET6" ]; then\n'
+            '    while ip -6 rule del priority 210 from "$SUBNET6" prohibit 2>/dev/null; do :; done\n'
+            '    ip -6 rule add priority 210 from "$SUBNET6" prohibit\n'
             '  else\n'
             '    while ip -6 rule del priority 210 iif "$IFACE" prohibit 2>/dev/null; do :; done\n'
             '    ip -6 rule add priority 210 iif "$IFACE" prohibit\n'
