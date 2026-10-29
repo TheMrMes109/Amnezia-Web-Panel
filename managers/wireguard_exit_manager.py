@@ -94,6 +94,8 @@ if [ -n "$WARP_IF" ]; then
     ip -4 route replace default via 172.29.173.2 dev "$WARP_IF" table 51820
     while ip -4 rule del priority 210 from {subnet_ip}/{subnet_cidr} table 51820 2>/dev/null; do :; done
     ip -4 rule add priority 210 from {subnet_ip}/{subnet_cidr} table 51820
+    while ip -6 rule del priority 210 iif wg0 prohibit 2>/dev/null; do :; done
+    ip -6 rule add priority 210 iif wg0 prohibit
 fi
 '''
             tail_marker = "tail -f /dev/null"
