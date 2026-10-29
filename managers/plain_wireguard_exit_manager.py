@@ -3,7 +3,7 @@
 It intentionally uses a separate container, port, config, peer table and subnet:
 a standard WireGuard entry must never be sent to the obfuscated endpoint.
 """
-from managers.exit_manager import EXIT_DEFAULTS, ExitManager
+from managers.exit_manager import ExitManager
 
 
 class PlainWireGuardExitManager(ExitManager):
@@ -37,7 +37,7 @@ class PlainWireGuardExitManager(ExitManager):
             result = self.install_protocol()
             if result.get("status") != "success":
                 raise RuntimeError(result.get("message", "Could not install plain WireGuard exit endpoint"))
-        if not self.check_container_running():
+        if not self.check_container_running(self.PROTOCOL):
             raise RuntimeError("Plain WireGuard exit endpoint is not running")
         return super().add_peer(peer_id, name, public_key)
 
