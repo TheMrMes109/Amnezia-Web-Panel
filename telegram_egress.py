@@ -4,10 +4,8 @@ Only api.telegram.org:443 is allowed. This keeps the panel's ordinary traffic
 untouched and fails closed when the selected exit node cannot be reached.
 """
 import select
-import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
 
 
 _ALLOWED_HOSTS = {"api.telegram.org"}
@@ -54,8 +52,6 @@ class _ConnectHandler(BaseHTTPRequestHandler):
                 b"HTTP/1.1 200 Connection Established\r\n"
                 b"Proxy-Agent: Amnezia-Web-Panel\r\n\r\n"
             )
-            self.connection.setblocking(False)
-            channel.setblocking(0)
             while True:
                 readable, _, exceptional = select.select(
                     [self.connection, channel], [], [self.connection, channel], 60
