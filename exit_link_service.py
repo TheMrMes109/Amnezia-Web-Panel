@@ -405,7 +405,7 @@ class ExitLinkService:
             await asyncio.to_thread(awg.exit_unlink, protocol)
             try:
                 exit_srv, _ = self._exit(data, link.get('exit_uid'))
-                exit_manager = await self._exit_manager(exit_srv)
+                exit_manager = await self._exit_manager(exit_srv, protocol)
                 await asyncio.to_thread(exit_manager.remove_peer, None,
                                         peer_id_for(entry_uid, protocol))
             except Exception as err:
