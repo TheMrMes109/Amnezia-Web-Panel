@@ -229,7 +229,8 @@ class ExitLinkService:
                 results.append({**item, 'status': 'error', 'error': str(err)})
         return results
 
-    async def link(self, entry_server_id, protocol, exit_uid, force=False, dns_via_exit=None):
+    async def link(self, entry_server_id, protocol, exit_uid, force=False, dns_via_exit=None,
+                   fallback_uids=None, priority_uids=None):
         data = self.load_data()
         entry, rec = self._entry(data, entry_server_id, protocol)
         entry_uid = entry['uid']
@@ -243,6 +244,23 @@ class ExitLinkService:
                 raise ExitLinkError('exit_legacy_obfuscation',
                                     'AmneziaWG Legacy can only link to a non-obfuscated exit node')
             previous = rec.get('exit_link') or {}
+            # Keep a stable ordered list so failover never depends on server-list order.
+            if priority_uids is not None:
+                priority = list(priority_uids)
+            elif fallback_uids is not None:
+                priority = [exit_uid] + list(fallback_uids)
+            else:
+                priority = list(previous.get('priority_uids') or [exit_uid])
+            priority = list(dict.fromkeys(str(uid).strip() for uid in priority if str(uid).strip()))
+            if not priority or priority[0] != exit_uid:
+                priority = [exit_uid] + [uid for uid in priority if uid != exit_uid]
+            for backup_uid in priority[1:]:
+                backup_srv, backup_rec = self._exit(data, backup_uid)
+                if backup_srv.get('uid') == entry['uid']:
+                    raise ExitLinkError('exit_self', 'A server cannot be its own exit node')
+                if self.protocol_base(protocol) == 'awg_legacy' and backup_rec.get('obfuscation'):
+                    raise ExitLinkError('exit_legacy_obfuscation',
+                                        'AmneziaWG Legacy can only link to a non-obfuscated exit node')
             explicit_dns = dns_via_exit is not None
             dns_via_exit = bool(previous.get('dns_via_exit') if dns_via_exit is None else dns_via_exit)
             peer_id = peer_id_for(entry['uid'], protocol)
@@ -336,6 +354,8 @@ class ExitLinkService:
                 'endpoint_port': link['endpoint_port'],
                 'obfuscation': link['obfuscation'],
                 'dns_via_exit': dns_via_exit,
+                'priority_uids': priority,
+                'fallback_uids': priority[1:],
                 'linked_at': datetime.now().isoformat(),
                 'stale': None,
             }
@@ -378,7 +398,9 @@ class ExitLinkService:
         link = rec.get('exit_link')
         if not link:
             raise ExitLinkError('not_linked', 'This instance is not linked to an exit node')
-        return await self.link(entry_server_id, protocol, link['exit_uid'], force=True)
+        priority = link.get('priority_uids') or [link['exit_uid']] + list(link.get('fallback_uids') or [])
+        return await self.link(entry_server_id, protocol, link['exit_uid'], force=True,
+                               dns_via_exit=link.get('dns_via_exit'), priority_uids=priority)
 
     async def relink_entries_for_exit(self, exit_uid):
         """After an exit node was reinstalled: re-register every linked entry."""
@@ -501,6 +523,59 @@ class ExitLinkService:
                     logger.warning("could not drop peer for %s on exit %s: %s", proto, link['exit_uid'], err)
                     results.append({'protocol': proto, 'exit_uid': link['exit_uid'], 'status': 'error', 'error': str(err)})
         return results
+
+    async def monitor_failover(self):
+        """Switch to the next configured exit when the current handshake expires.
+
+        Entry SSH failures are ignored because they do not prove the exit is down.
+        """
+        data = self.load_data()
+        candidates = []
+        for server in data.get('servers', []):
+            for protocol, rec in ((server.get('protocols') or {}).items()):
+                link = (rec or {}).get('exit_link') or {}
+                priority = link.get('priority_uids') or []
+                if link.get('exit_uid') and len(priority) > 1:
+                    candidates.append((server.get('uid'), protocol, link.get('exit_uid'),
+                                       list(priority), bool(link.get('dns_via_exit'))))
+        for entry_uid, protocol, current_uid, priority, dns_via_exit in candidates:
+            if current_uid not in priority:
+                continue
+            try:
+                fresh = self.load_data()
+                index, entry = self.find_server_by_uid(fresh, entry_uid)
+                if index is None or not entry:
+                    continue
+                _, rec = self._entry(fresh, index, protocol)
+                current_link = rec.get('exit_link') or {}
+                if current_link.get('exit_uid') != current_uid:
+                    continue
+                awg = await self._awg(entry)
+                status = await asyncio.to_thread(awg.exit_link_status, protocol)
+            except Exception as err:
+                logger.debug("exit failover health check skipped for %s/%s: %s", entry_uid, protocol, err)
+                continue
+            if status and status.get('up'):
+                continue
+            start = priority.index(current_uid) + 1
+            for backup_uid in priority[start:]:
+                try:
+                    fresh = self.load_data()
+                    backup_index, backup = self.find_server_by_uid(fresh, backup_uid)
+                    if backup_index is None or not backup or not ((backup.get('protocols') or {}).get('exit') or {}).get('installed'):
+                        continue
+                    entry_index, _ = self.find_server_by_uid(fresh, entry_uid)
+                    if entry_index is None:
+                        break
+                    logger.warning("Exit %s unhealthy for %s/%s; trying backup %s", current_uid, entry_uid, protocol, backup_uid)
+                    await self.link(entry_index, protocol, backup_uid, force=False,
+                                    dns_via_exit=dns_via_exit, priority_uids=priority)
+                    logger.warning("Exit failover completed for %s/%s: %s -> %s", entry_uid, protocol, current_uid, backup_uid)
+                    break
+                except Exception as err:
+                    logger.warning("Exit failover to %s failed for %s/%s: %s", backup_uid, entry_uid, protocol, err)
+            else:
+                logger.error("No working backup exit could be activated for %s/%s", entry_uid, protocol)
 
     @staticmethod
     def _endpoint_ip(status):
