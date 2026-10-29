@@ -258,8 +258,9 @@ iptables -C FORWARD -j DOCKER-USER 2>/dev/null || iptables -A FORWARD -j DOCKER-
         # isolated transit network exists. Attach before start.sh runs so
         # client-subnet policy routing can be configured on container startup.
         self.ssh.run_sudo_command(
-            f"docker network inspect amnezia-warp-net >/dev/null 2>&1 && "
-            f"docker network connect amnezia-warp-net {self.CONTAINER_NAME} >/dev/null 2>&1 || true"
+            f"if docker network inspect amnezia-warp-net >/dev/null 2>&1; then "
+            f"docker network connect amnezia-warp-net {self.CONTAINER_NAME} >/dev/null 2>&1 || true; "
+            f"docker exec {self.CONTAINER_NAME} sh -c 'touch /opt/amnezia/warp-egress.enabled'; fi"
         )
 
         # Wait for container
@@ -381,6 +382,12 @@ if [ -n "$WARP_IF" ]; then
     ip -4 rule add priority 210 from "$WARP_SUBNET" table 51820
     # Standard WG instances have no server-side IPv6 client subnet; block any
     # forwarded IPv6 packet rather than letting it bypass the IPv4 WARP gateway.
+    while ip -6 rule del priority 210 iif {self.INTERFACE} prohibit 2>/dev/null; do :; done
+    ip -6 rule add priority 210 iif {self.INTERFACE} prohibit
+elif [ -f /opt/amnezia/warp-egress.enabled ]; then
+    # Gateway interface vanished while WARP is enabled: fail closed.
+    while ip -4 rule del priority 210 from "$WARP_SUBNET" prohibit 2>/dev/null; do :; done
+    ip -4 rule add priority 210 from "$WARP_SUBNET" prohibit
     while ip -6 rule del priority 210 iif {self.INTERFACE} prohibit 2>/dev/null; do :; done
     ip -6 rule add priority 210 iif {self.INTERFACE} prohibit
 fi
