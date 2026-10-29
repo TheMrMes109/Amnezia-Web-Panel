@@ -521,6 +521,8 @@
   "exit_link_title": "Exit node",
   "exit_link_desc": "Route all clients of this instance through another panel server. The link between the nodes is encrypted; clients keep their configs. IPv4 only: while linked, client IPv6 is refused rather than leaking from this server.",
   "exit_link_select": "Exit node",
+  "exit_link_fallbacks": "Backup exit nodes (in priority order)",
+  "exit_link_fallbacks_hint": "If the current exit node stops working, the panel will try these servers in the order you select them.",
   "exit_link_none": "Traffic leaves directly from this server.",
   "exit_link_current": "Linked to {name} (transit {ip})",
   "exit_link_via": "Exit node",

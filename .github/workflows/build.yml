@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 env:
   IMAGE_NAME: amnezia-panel
@@ -94,13 +95,10 @@ jobs:
           - variant: default
             dockerfile: Dockerfile
             suffix: ''
-            # The panel runs on both x86_64 and ARM64 servers.
             platforms: linux/amd64,linux/arm64
           - variant: warp
             dockerfile: Dockerfile.warp
             suffix: '-warp'
-            # cloudflare-warp is installed via apt, which is slow under QEMU.
-            # linux/arm64 can be added here — the Cloudflare repo ships it.
             platforms: linux/amd64
 
     steps:
@@ -163,18 +161,14 @@ jobs:
           echo
           echo "Platforms: \`${{ matrix.platforms }}\`"
           echo
-          echo '```'
+          echo '---'
           echo "${{ steps.meta.outputs.tags }}"
-          echo '```'
+          echo '---'
         } >> "$GITHUB_STEP_SUMMARY"
 
   release:
     needs: build
-
-    # Docker Buildx also uploads *.dockerbuild artifacts by default. Keep the
-    # release job scoped to the three binary artifacts produced by `build`.
-    if: startsWith(github.ref, 'refs/tags/')
-
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
 
     steps:
@@ -186,7 +180,9 @@ jobs:
         merge-multiple: true
 
     - name: Prepare release assets
+      shell: bash
       run: |
+        set -euo pipefail
         test -f artifacts/Amnezia-Web-Panel-Linux
         test -f artifacts/Amnezia-Web-Panel-macOS
         test -f artifacts/Amnezia-Web-Panel-Windows.exe
@@ -196,10 +192,14 @@ jobs:
     - name: Publish Release
       uses: softprops/action-gh-release@v2
       with:
+        tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest' }}
+        target_commitish: ${{ github.sha }}
+        name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Amnezia Web Panel Latest' }}
+        make_latest: ${{ startsWith(github.ref, 'refs/tags/v') && 'true' || 'false' }}
         generate_release_notes: true
+        overwrite_files: true
         fail_on_unmatched_files: true
         files: |
           artifacts/Amnezia-Web-Panel-Linux
           artifacts/Amnezia-Web-Panel-macOS
           artifacts/Amnezia-Web-Panel-Windows.exe
-

@@ -1230,8 +1230,13 @@
         <div id="exitLinkWarnings"></div>
         <div class="form-group">
             <label class="form-label">{{ _('exit_link_select') }}</label>
-            <select class="form-input" id="exitLinkSelect"></select>
+            <select class="form-input" id="exitLinkSelect" onchange="renderExitFallbackOptions()"></select>
             <div class="form-hint" id="exitLinkSelectHint"></div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">{{ _('exit_link_fallbacks') }}</label>
+            <select class="form-input" id="exitLinkFallbackSelect" multiple size="4" onchange="trackExitFallbackOrder()"></select>
+            <div class="form-hint">{{ _('exit_link_fallbacks_hint') }}</div>
         </div>
         <div class="form-group hidden" id="exitDnsGroup">
             <label class="form-label" style="display:flex; align-items:center; gap:var(--space-sm);">
@@ -3572,6 +3577,10 @@
     let currentExitPeersProto = 'exit';
     let currentExitLinkProto = null;
     let currentExitLinkState = null;
+    let exitFallbackOrder = [];
+    let exitNodeCandidates = [];
+    let exitUnavailableFallbackUids = [];
+    let exitLegacyMode = false;
     const EXIT_LINK_ERROR_KEYS = ['exit_no_handshake', 'exit_mtu_too_big', 'exit_self', 'exit_legacy_obfuscation',
         'exit_not_found', 'exit_apply_failed', 'exit_in_use', 'exit_egress_failed', 'exit_dns_needs_dns',
         'not_linked'];
@@ -3681,8 +3690,10 @@
         currentExitLinkProto = proto;
         document.getElementById('exitLinkTitle').textContent = `${_('exit_link_title')} — ${getProtoTitle(proto)}`;
         const select = document.getElementById('exitLinkSelect');
+        const fallbackSelect = document.getElementById('exitLinkFallbackSelect');
         const hint = document.getElementById('exitLinkSelectHint');
         select.innerHTML = '';
+        fallbackSelect.innerHTML = '';
         hint.textContent = '';
         document.getElementById('exitLinkState').innerHTML = `<div class="form-hint">${_('loading')}</div>`;
         document.getElementById('exitLinkWarnings').innerHTML = '';
@@ -3703,15 +3714,28 @@
             if (!candidates.length) {
                 hint.textContent = _('exit_no_exit_nodes');
             }
-            const legacy = protoBase(proto) === 'awg_legacy';
+            exitLegacyMode = protoBase(proto) === 'awg_legacy';
+            exitNodeCandidates = candidates;
+            const activeUid = state.exit_link && state.exit_link.exit_uid;
+            const savedPriority = (state.exit_link && state.exit_link.priority_uids) ||
+                (activeUid ? [activeUid] : []);
+            const activeIndex = activeUid ? savedPriority.indexOf(activeUid) : -1;
+            // A failover may leave older records with the failed primary before
+            // the active node. Those earlier nodes are not backups for the new
+            // active node and must not be shown/selected as such.
+            exitUnavailableFallbackUids = activeIndex > 0 ? savedPriority.slice(0, activeIndex) : [];
+            const activePriority = activeIndex >= 0 ? savedPriority.slice(activeIndex) : savedPriority;
+            exitFallbackOrder = activePriority.slice(1).filter(uid =>
+                uid !== activeUid && candidates.some(n => n.uid === uid));
             candidates.forEach(n => {
-                const opt = document.createElement('option');
-                opt.value = n.uid;
-                opt.textContent = `${n.name} (${n.host}:${n.port || '?'})${n.obfuscation ? ' [AWG]' : ''}`;
-                if (legacy && n.obfuscation) { opt.disabled = true; opt.title = _('exit_legacy_obfuscation'); }
-                if (state.exit_link && state.exit_link.exit_uid === n.uid) opt.selected = true;
-                select.appendChild(opt);
+                const label = `${n.name} (${n.host}:${n.port || '?'})${n.obfuscation ? ' [AWG]' : ''}`;
+                const primary = document.createElement('option');
+                primary.value = n.uid; primary.textContent = label;
+                if (exitLegacyMode && n.obfuscation) { primary.disabled = true; primary.title = _('exit_legacy_obfuscation'); }
+                if (activeUid === n.uid) primary.selected = true;
+                select.appendChild(primary);
             });
+            renderExitFallbackOptions(activePriority.slice(1));
             document.getElementById('exitLinkBtn').disabled = !candidates.length;
             renderExitLinkState(state);
         } catch (err) {
@@ -3746,11 +3770,50 @@
         }
     }
 
+    function renderExitFallbackOptions(selectedUids = null) {
+        const select = document.getElementById('exitLinkSelect');
+        const fallbackSelect = document.getElementById('exitLinkFallbackSelect');
+        if (!select || !fallbackSelect) return;
+        const activeUid = select.value;
+        const selected = selectedUids === null
+            ? Array.from(fallbackSelect.selectedOptions).map(option => option.value)
+            : selectedUids;
+        const allowed = exitNodeCandidates.filter(n =>
+            n.uid !== activeUid && !exitUnavailableFallbackUids.includes(n.uid));
+        fallbackSelect.innerHTML = '';
+        allowed.forEach(n => {
+            const option = document.createElement('option');
+            option.value = n.uid;
+            option.textContent = `${n.name} (${n.host}:${n.port || '?'})${n.obfuscation ? ' [AWG]' : ''}`;
+            if (exitLegacyMode && n.obfuscation) {
+                option.disabled = true;
+                option.title = _('exit_legacy_obfuscation');
+            }
+            option.selected = selected.includes(n.uid);
+            fallbackSelect.appendChild(option);
+        });
+        const selectedAllowed = new Set(allowed.filter(n => selected.includes(n.uid)).map(n => n.uid));
+        exitFallbackOrder = exitFallbackOrder.filter(uid => selectedAllowed.has(uid));
+        selected.forEach(uid => {
+            if (selectedAllowed.has(uid) && !exitFallbackOrder.includes(uid)) exitFallbackOrder.push(uid);
+        });
+    }
+
+    function trackExitFallbackOrder() {
+        const select = document.getElementById('exitLinkFallbackSelect');
+        const selected = Array.from(select.selectedOptions).map(option => option.value);
+        exitFallbackOrder = exitFallbackOrder.filter(uid => selected.includes(uid));
+        selected.forEach(uid => { if (!exitFallbackOrder.includes(uid)) exitFallbackOrder.push(uid); });
+    }
+
     async function saveExitLink(force = false) {
         const uid = document.getElementById('exitLinkSelect').value;
         if (!uid) return;
+        const selected = Array.from(document.getElementById('exitLinkFallbackSelect').selectedOptions)
+            .map(option => option.value).filter(value => value !== uid);
+        const fallback_uids = exitFallbackOrder.filter(value => selected.includes(value));
         if (currentExitLinkState && currentExitLinkState.ipv6 && !confirm(_('exit_link_ipv6_confirm'))) return;
-        await exitLinkRequest('', { protocol: currentExitLinkProto, exit_uid: uid, force }, 'exit_link_saved');
+        await exitLinkRequest('', { protocol: currentExitLinkProto, exit_uid: uid, fallback_uids, force }, 'exit_link_saved');
     }
 
     async function removeExitLink() {

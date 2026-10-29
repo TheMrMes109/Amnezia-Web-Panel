@@ -470,6 +470,8 @@
   "exit_link_title": "出口节点",
   "exit_link_desc": "将此实例的所有客户端流量经由面板中的另一台服务器路由。节点间链路已加密，客户端无需更改配置。仅支持 IPv4：关联期间将阻断客户端 IPv6 流量，防止其从此服务器泄漏。",
   "exit_link_select": "出口节点",
+  "exit_link_fallbacks": "备用出口节点",
+  "exit_link_fallbacks_hint": "如果当前出口节点停止工作，面板将按选择顺序尝试这些服务器。",
   "exit_link_none": "流量直接从此服务器访问互联网。",
   "exit_link_current": "已关联到 {name}（中转 {ip}）",
   "exit_link_via": "出口节点",

@@ -2418,6 +2418,7 @@ class ExitPeerRemoveRequest(BaseModel):
 class ExitLinkRequest(BaseModel):
     protocol: str = 'awg'
     exit_uid: str = ''
+    fallback_uids: List[str] = Field(default_factory=list)
     force: Optional[bool] = False
 
 
@@ -2798,6 +2799,16 @@ def _start_conn_monitor():
     logger.info(f"Connection-flood monitor started (every {CONN_MONITOR_INTERVAL}s)")
 
 
+async def _exit_failover_loop():
+    """Periodically check exit links and activate configured backups."""
+    while True:
+        try:
+            await exit_link_svc.monitor_failover()
+        except Exception:
+            logger.exception("Exit-node failover monitor failed")
+        await asyncio.sleep(30)
+
+
 @app.on_event("startup")
 async def startup():
     global _panel_lease
@@ -2889,6 +2900,7 @@ async def startup():
 
     # Start periodic background tasks
     asyncio.create_task(periodic_background_tasks())
+    asyncio.create_task(_exit_failover_loop())
 
     # Re-apply public-port forwards on the fleet: hand-made iptables rules do
     # not survive reboots on their own, and only some hosts persist them.
@@ -4992,7 +5004,9 @@ async def api_exit_link(request: Request, server_id: int, req: ExitLinkRequest):
     if not _check_admin(request):
         return JSONResponse({'error': 'Forbidden'}, status_code=403)
     try:
-        return await exit_link_svc.link(server_id, req.protocol, req.exit_uid.strip(), force=bool(req.force))
+        return await exit_link_svc.link(
+            server_id, req.protocol, req.exit_uid.strip(), force=bool(req.force),
+            fallback_uids=[uid.strip() for uid in req.fallback_uids if uid.strip() and uid.strip() != req.exit_uid.strip()])
     except ExitLinkError as e:
         return _exit_link_error(e)
     except Exception as e:
