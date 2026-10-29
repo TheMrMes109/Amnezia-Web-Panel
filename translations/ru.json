@@ -876,5 +876,15 @@
   "full_backup_error": "Не удалось скачать backup. Проверьте права администратора и хранилище.",
   "telegram_exit_node_label": "Выходная нода для Telegram-бота",
   "telegram_exit_direct": "Напрямую — без выходной ноды",
-  "telegram_exit_node_hint": "Запросы Telegram Bot API пойдут через SSH-туннель к выбранному серверу. На сервере должна быть разрешена TCP-переадресация SSH. При сбое туннеля бот не переключится на прямое подключение."
+  "telegram_exit_node_hint": "Запросы Telegram Bot API пойдут через SSH-туннель к выбранному серверу. На сервере должна быть разрешена TCP-переадресация SSH. При сбое туннеля бот не переключится на прямое подключение.",
+  "warp_egress_title": "Cloudflare WARP для WireGuard / AmneziaWG",
+  "warp_egress_disabled": "Не включён",
+  "warp_egress_enabled": "Включён",
+  "warp_egress_hint": "Развернуть отдельный шлюз WARP на каждом сервере с установленным WireGuard или AmneziaWG. Интернет-трафик клиентов VPN пойдёт через WARP; входные VPN-порты и SSH-управление сохранят обычный маршрут. Новые установки WG/AWG автоматически унаследуют настройку.",
+  "warp_egress_active_hint": "Выход через WARP включён для установленных WG/AWG. Если шлюз недоступен, интернет-трафик клиентов блокируется, а не переключается на прямой маршрут сервера.",
+  "warp_egress_counts": "Установлено подключений WG/AWG: {}; серверов: {}.",
+  "warp_egress_enable": "Включить для всех WG/AWG",
+  "warp_egress_disable": "Отключить для всех WG/AWG",
+  "warp_egress_enabled_toast": "Выход через Cloudflare WARP включён для WG/AWG.",
+  "warp_egress_disabled_toast": "Выход через Cloudflare WARP отключён для WG/AWG."
 }
