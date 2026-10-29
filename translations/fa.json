@@ -876,5 +876,15 @@
   "full_backup_error": "دانلود پشتیبان ممکن نشد. دسترسی مدیر و فضای ذخیره‌سازی را بررسی کنید.",
   "telegram_exit_node_label": "گره خروج ربات تلگرام",
   "telegram_exit_direct": "اتصال مستقیم (بدون گره خروج)",
-  "telegram_exit_node_hint": "درخواست‌های Telegram Bot API از طریق تونل SSH به سرور خروجی انتخاب‌شده ارسال می‌شوند. ارسال TCP از طریق SSH باید روی آن سرور مجاز باشد. در صورت قطع تونل، ربات به اتصال مستقیم برنمی‌گردد."
+  "telegram_exit_node_hint": "درخواست‌های Telegram Bot API از طریق تونل SSH به سرور خروجی انتخاب‌شده ارسال می‌شوند. ارسال TCP از طریق SSH باید روی آن سرور مجاز باشد. در صورت قطع تونل، ربات به اتصال مستقیم برنمی‌گردد.",
+  "warp_egress_title": "Cloudflare WARP برای WireGuard / AmneziaWG",
+  "warp_egress_disabled": "غیرفعال",
+  "warp_egress_enabled": "فعال",
+  "warp_egress_hint": "یک دروازهٔ جداگانهٔ WARP روی هر سروری که WireGuard یا AmneziaWG نصب دارد راه‌اندازی می‌کند. ترافیک اینترنت کاربران VPN از WARP عبور می‌کند؛ پورت‌های ورودی VPN و مدیریت SSH مسیر عادی خود را حفظ می‌کنند. نصب‌های جدید WG/AWG نیز این تنظیم را به ارث می‌برند.",
+  "warp_egress_active_hint": "خروجی WARP برای نمونه‌های نصب‌شدهٔ WG/AWG فعال است. اگر دروازه در دسترس نباشد، ترافیک کاربر مسدود می‌شود و به مسیر مستقیم سرور برنمی‌گردد.",
+  "warp_egress_counts": "{} نمونهٔ نصب‌شدهٔ WG/AWG روی {} سرور.",
+  "warp_egress_enable": "فعال‌سازی برای همهٔ WG/AWG",
+  "warp_egress_disable": "غیرفعال‌سازی برای همهٔ WG/AWG",
+  "warp_egress_enabled_toast": "خروجی Cloudflare WARP برای WG/AWG فعال شد.",
+  "warp_egress_disabled_toast": "خروجی Cloudflare WARP برای WG/AWG غیرفعال شد."
 }
