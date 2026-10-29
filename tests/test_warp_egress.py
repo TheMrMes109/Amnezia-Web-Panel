@@ -1,5 +1,8 @@
 """Cloudflare WARP egress is optional and scoped to WG client traffic."""
 import unittest
+import shutil
+import subprocess
+from pathlib import Path
 from unittest.mock import patch
 
 from managers.wireguard_manager import WireGuardManager
@@ -44,6 +47,11 @@ class WireGuardWarpEgressTests(unittest.TestCase):
         self.assertIn('ip -4 rule add priority 210 from "$SUBNET" table 51820', script)
         self.assertIn('iptables -t nat -A POSTROUTING -s "$SUBNET" -o "$WARP_IF" -j MASQUERADE', script)
 
+    def test_awg_ipv6_uses_warp_when_available_or_fails_closed(self):
+        script = AWGManager(None)._render_start_script("awg")
+        self.assertIn('ip -6 route replace default via fd42:173::2 dev "$WARP_IF" table 51822', script)
+        self.assertIn('ip -6 rule add priority 210 from "$SUBNET6" prohibit', script)
+
     def test_wireguard_exit_hooks_and_warp_block_coexist(self):
         ssh = RecordingSSH()
         original = """#!/bin/bash
@@ -77,6 +85,14 @@ tail -f /dev/null
         script = ssh.uploads["/tmp/_wg_start.sh"]
         self.assertIn("if [ -n \"$WARP_IF\" ]; then", script)
         self.assertIn("WARP_IF=$(ip -o -4 addr show", script)
+
+
+class WarpTemplateTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("bash"), "bash is not installed")
+    def test_gateway_entrypoint_parses_as_bash(self):
+        template = Path(__file__).resolve().parents[1] / "protocol_templates" / "cloudflare-warp" / "entrypoint.sh"
+        result = subprocess.run(["bash", "-n", str(template)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":
