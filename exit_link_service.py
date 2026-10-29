@@ -422,7 +422,7 @@ class ExitLinkService:
             raise ExitLinkError('not_linked', 'This instance is not linked to an exit node')
         priority = link.get('priority_uids') or [link['exit_uid']] + list(link.get('fallback_uids') or [])
         return await self.link(entry_server_id, protocol, link['exit_uid'], force=True,
-                               dns_via_exit=link.get('dns_via_exit'), priority_uids=priority)
+                               priority_uids=priority)
 
     async def relink_entries_for_exit(self, exit_uid):
         """After an exit node was reinstalled: re-register every linked entry."""
