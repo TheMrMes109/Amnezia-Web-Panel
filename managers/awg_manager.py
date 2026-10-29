@@ -1408,6 +1408,13 @@ done
 
         # Connect to DNS network
         self.ssh.run_sudo_command(f"docker network connect amnezia-dns-net {container_name}")
+        # Attach to the optional WARP transit network before the generated
+        # start.sh runs. Existing installations are handled by the panel's
+        # global WARP egress action.
+        self.ssh.run_sudo_command(
+            f"docker network inspect amnezia-warp-net >/dev/null 2>&1 && "
+            f"docker network connect amnezia-warp-net {container_name} >/dev/null 2>&1 || true"
+        )
 
         # Wait for container to be fully running
         results.append("Waiting for container to start...")
@@ -1790,6 +1797,16 @@ fi
         quick_bin = self._quick_binary(protocol_type)
         subnet_default = f"{AWG_DEFAULTS['subnet_ip']}/{AWG_DEFAULTS['subnet_cidr']}"
         functions = self._exit_shell_functions(config_path, quick_bin, subnet_default)
+        warp_egress = (
+            '# ---- Optional Cloudflare WARP egress for VPN clients ----\n'
+            'WARP_IF=$(ip -o -4 addr show | awk \'$4 ~ /^172.29.173\\./ {print $2; exit}\')\n'
+            'if [ -n "$WARP_IF" ]; then\n'
+            '  ip -4 route replace 172.29.173.0/24 dev "$WARP_IF" table 51820\n'
+            '  ip -4 route replace default via 172.29.173.2 dev "$WARP_IF" table 51820\n'
+            '  while ip -4 rule del priority 210 from "$SUBNET" table 51820 2>/dev/null; do :; done\n'
+            '  ip -4 rule add priority 210 from "$SUBNET" table 51820\n'
+            'fi\n'
+        )
         return self._start_script_body(
             config_path,
             quick_bin,
@@ -1798,7 +1815,8 @@ fi
             self._bwlimits_path(),
             pre_blocks=(functions + '[ -f "$EXIT_CONF" ] && x_killswitch_on\n',),
             extra_blocks=('# ---- Exit-node link: bring it up now that the client tunnel exists ----\n'
-                          'if [ -f "$EXIT_CONF" ]; then x_link_up || echo "! exit link not applied, clients stay on the kill-switch"; fi\n',),
+                          'if [ -f "$EXIT_CONF" ]; then x_link_up || echo "! exit link not applied, clients stay on the kill-switch"; fi\n',
+                          warp_egress),
         )
 
     def _write_start_script(self, protocol_type, config_path=None):
