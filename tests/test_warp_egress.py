@@ -36,9 +36,9 @@ class WireGuardWarpEgressTests(unittest.TestCase):
 
         script = ssh.uploads["/tmp/_wg_start.sh"]
         self.assertIn("# Optional Cloudflare WARP egress", script)
-        self.assertIn("ip -4 rule add priority 210 from 10.8.2.0/24 table 51820", script)
+        self.assertIn('ip -4 rule add priority 210 from "$WARP_SUBNET" table 51820', script)
         self.assertIn("default via 172.29.173.2", script)
-        self.assertIn("iptables -t nat -A POSTROUTING -s 10.8.2.0/24 -o \"$WARP_IF\" -j MASQUERADE", script)
+        self.assertIn('iptables -t nat -A POSTROUTING -s "$WARP_SUBNET" -o "$WARP_IF" -j MASQUERADE', script)
         self.assertIn("ip -6 rule add priority 210 iif wg0 prohibit", script)
         self.assertEqual(ssh.commands[-1], "docker restart amnezia-wireguard")
 
