@@ -377,6 +377,10 @@ if [ -n "$WARP_IF" ]; then
     iptables -t nat -C POSTROUTING -s {subnet_ip}/{subnet_cidr} -o "$WARP_IF" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {subnet_ip}/{subnet_cidr} -o "$WARP_IF" -j MASQUERADE
     while ip -4 rule del priority 210 from {subnet_ip}/{subnet_cidr} table 51820 2>/dev/null; do :; done
     ip -4 rule add priority 210 from {subnet_ip}/{subnet_cidr} table 51820
+    # Standard WG instances have no server-side IPv6 client subnet; block any
+    # forwarded IPv6 packet rather than letting it bypass the IPv4 WARP gateway.
+    while ip -6 rule del priority 210 iif {self.INTERFACE} prohibit 2>/dev/null; do :; done
+    ip -6 rule add priority 210 iif {self.INTERFACE} prohibit
 fi
 
 # Re-apply per-peer bandwidth limits (flat file written by the panel)
