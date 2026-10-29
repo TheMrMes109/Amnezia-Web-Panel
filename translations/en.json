@@ -886,5 +886,7 @@
   "warp_egress_enable": "Enable for all WG/AWG",
   "warp_egress_disable": "Disable for all WG/AWG",
   "warp_egress_enabled_toast": "Cloudflare WARP egress enabled for WG/AWG.",
-  "warp_egress_disabled_toast": "Cloudflare WARP egress disabled for WG/AWG."
+  "warp_egress_disabled_toast": "Cloudflare WARP egress disabled for WG/AWG.",
+  "warp_egress_confirm_enable": "Enable Cloudflare WARP for all installed WG/AWG instances? Every affected container will restart briefly.",
+  "warp_egress_confirm_disable": "Disable Cloudflare WARP for all installed WG/AWG instances? Every affected container will restart briefly."
 }
