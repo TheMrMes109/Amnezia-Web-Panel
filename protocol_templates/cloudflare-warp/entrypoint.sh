@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 WARP_SUBNET="${WARP_SUBNET:-172.29.173.0/24}"
+WARP_SUBNET6="${WARP_SUBNET6:-fd42:173::/64}"
+WARP_IPV6_ENABLED="${WARP_IPV6_ENABLED:-0}"
 WARP_IF=""
 
 mkdir -p /var/lib/cloudflare-warp /run/dbus
@@ -52,6 +54,16 @@ ip rule add priority 210 from "$WARP_SUBNET" table 51821
 iptables -C FORWARD -i eth0 -o "$WARP_IF" -j ACCEPT 2>/dev/null || iptables -A FORWARD -i eth0 -o "$WARP_IF" -j ACCEPT
 iptables -C FORWARD -i "$WARP_IF" -o eth0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || iptables -A FORWARD -i "$WARP_IF" -o eth0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 iptables -t nat -C POSTROUTING -s "$WARP_SUBNET" -o "$WARP_IF" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$WARP_SUBNET" -o "$WARP_IF" -j MASQUERADE
+
+if [ "$WARP_IPV6_ENABLED" = "1" ]; then
+    ip -6 route replace "$WARP_SUBNET6" dev eth0 table 51822
+    ip -6 route replace default dev "$WARP_IF" table 51822
+    while ip -6 rule del priority 210 from "$WARP_SUBNET6" table 51822 2>/dev/null; do :; done
+    ip -6 rule add priority 210 from "$WARP_SUBNET6" table 51822
+    ip6tables -C FORWARD -i eth0 -o "$WARP_IF" -j ACCEPT 2>/dev/null || ip6tables -A FORWARD -i eth0 -o "$WARP_IF" -j ACCEPT || true
+    ip6tables -C FORWARD -i "$WARP_IF" -o eth0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || ip6tables -A FORWARD -i "$WARP_IF" -o eth0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT || true
+    ip6tables -t nat -C POSTROUTING -s "$WARP_SUBNET6" -o "$WARP_IF" -j MASQUERADE 2>/dev/null || ip6tables -t nat -A POSTROUTING -s "$WARP_SUBNET6" -o "$WARP_IF" -j MASQUERADE || true
+fi
 
 echo "Cloudflare WARP gateway ready on $WARP_IF"
 tail -f /dev/null
