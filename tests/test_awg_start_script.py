@@ -20,6 +20,15 @@ def fixture(name):
         return f.read()
 
 
+def without_optional_warp_egress(script):
+    marker = '# ---- Optional Cloudflare WARP egress for VPN clients ----'
+    if marker not in script:
+        return script
+    start = script.index(marker)
+    end = script.index('tail -f /dev/null', start)
+    return script[:start] + script[end:]
+
+
 class RecordingSSH:
     def __init__(self):
         self.uploads = {}
@@ -50,7 +59,9 @@ class GoldenBuilderTests(unittest.TestCase):
     script gained the entry-side exit-node block)."""
 
     def test_start_script_awg(self):
-        self.assertEqual(AWGManager(None)._render_start_script('awg'), fixture('start_awg.sh'))
+        script = AWGManager(None)._render_start_script('awg')
+        self.assertIn('# ---- Optional Cloudflare WARP egress for VPN clients ----', script)
+        self.assertEqual(without_optional_warp_egress(script), fixture('start_awg.sh'))
 
     def test_start_script_self_heals_tools_kernel_mismatch(self):
         """start.sh must detect an awg-tools vs kernel-module version mismatch
@@ -63,12 +74,14 @@ class GoldenBuilderTests(unittest.TestCase):
 
     def test_start_script_awg3_carries_userspace_guard(self):
         script = AWGManager(None)._render_start_script('awg3')
-        self.assertEqual(script, fixture('start_awg3.sh'))
+        self.assertIn('# ---- Optional Cloudflare WARP egress for VPN clients ----', script)
+        self.assertEqual(without_optional_warp_egress(script), fixture('start_awg3.sh'))
         self.assertIn(AWG3_USERSPACE_GUARD, script)
 
     def test_start_script_legacy_uses_wg_quick(self):
         script = AWGManager(None)._render_start_script('awg_legacy')
-        self.assertEqual(script, fixture('start_awg_legacy.sh'))
+        self.assertIn('# ---- Optional Cloudflare WARP egress for VPN clients ----', script)
+        self.assertEqual(without_optional_warp_egress(script), fixture('start_awg_legacy.sh'))
         self.assertIn('wg-quick up /opt/amnezia/awg/wg0.conf', script)
         self.assertNotIn('awg-quick', script)
 
