@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 EXIT_MTU_LIMIT = 1420          # exit0 MTU; client MTU must not exceed it
 HANDSHAKE_WAIT_SECONDS = 15
 HANDSHAKE_POLL_SECONDS = 2
+FAILOVER_HANDSHAKE_TIMEOUT_SECONDS = 90  # 3 keepalive intervals; fail over before the UI's 300s stale threshold
 
 
 class ExitLinkError(Exception):
@@ -571,7 +572,12 @@ class ExitLinkService:
             except Exception as err:
                 logger.debug("exit failover health check skipped for %s/%s: %s", entry_uid, protocol, err)
                 continue
-            if status and status.get('up'):
+            handshake_age = (status or {}).get('handshake_age')
+            # The general status badge deliberately tolerates up to 300s of
+            # idle time. Failover must react sooner: PersistentKeepalive is 25s,
+            # so 90s without a handshake is a practical outage signal.
+            if (status and status.get('up') and handshake_age is not None
+                    and 0 <= handshake_age < FAILOVER_HANDSHAKE_TIMEOUT_SECONDS):
                 continue
             for backup_index_in_priority, backup_uid in enumerate(active_priority[1:], start=1):
                 try:
