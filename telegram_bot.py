@@ -1646,8 +1646,9 @@ async def _run_bot(token: str, load_data_fn: Callable, generate_vpn_link_fn: Cal
             return
         try:
             ssh_manager = await asyncio.to_thread(ssh_factory, exit_node_server)
-            proxy = TelegramExitProxy(ssh_manager).start()
+            proxy = TelegramExitProxy(ssh_manager)
             await asyncio.to_thread(proxy.check_upstream)
+            proxy.start()
             client_kwargs["proxies"] = proxy.url
             logger.info("Telegram Bot API traffic is routed through selected exit node %s", exit_node_server.get("name") or exit_node_server.get("host"))
         except Exception:
