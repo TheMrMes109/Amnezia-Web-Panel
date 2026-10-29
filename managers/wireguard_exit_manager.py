@@ -97,6 +97,8 @@ if [ -n "$WARP_IF" ]; then
     while ip -6 rule del priority 210 iif wg0 prohibit 2>/dev/null; do :; done
     ip -6 rule add priority 210 iif wg0 prohibit
 elif [ -f /opt/amnezia/warp-egress.enabled ]; then
+    while ip -4 rule del priority 210 from {subnet_ip}/{subnet_cidr} table 51820 2>/dev/null; do :; done
+    ip -4 route flush table 51820 2>/dev/null || true
     while ip -4 rule del priority 210 from {subnet_ip}/{subnet_cidr} prohibit 2>/dev/null; do :; done
     ip -4 rule add priority 210 from {subnet_ip}/{subnet_cidr} prohibit
     while ip -6 rule del priority 210 iif wg0 prohibit 2>/dev/null; do :; done
