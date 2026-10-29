@@ -1,4 +1,5 @@
 import asyncio
+import asyncio
 import copy
 import unittest
 
@@ -173,6 +174,18 @@ def run(coro):
 
 
 class LinkTests(unittest.TestCase):
+    def test_standard_wireguard_can_link_to_a_plain_exit(self):
+        h = Harness()
+        h.data['servers'][0]['protocols']['wireguard'] = {'installed': True, 'port': '51820'}
+        h.service.wireguard_manager_factory = lambda host: h.awg(host)
+
+        result = run(h.service.link(0, 'wireguard', 'exit-a'))
+
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['exit_link']['exit_uid'], 'exit-a')
+        self.assertEqual(h.awg().calls[0], ('exit_prepare_keys', 'wireguard'))
+        self.assertEqual(h.exit().calls[0][0], 'add_peer')
+
     def test_monitor_switches_to_the_next_configured_exit(self):
         h = Harness()
         run(h.service.link(0, 'awg2', 'exit-a', fallback_uids=['exit-b']))
