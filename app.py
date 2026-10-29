@@ -334,6 +334,7 @@ def load_data():
     })
     settings.setdefault('captcha', {'enabled': False})
     settings.setdefault('exit_nodes', {'default_exit_uid': ''})
+    settings.setdefault('warp_egress_enabled', False)
     settings.setdefault('telegram', {'token': '', 'enabled': False, 'exit_node_uid': ''})
     settings['telegram'].setdefault('exit_node_uid', '')
     mail = settings.setdefault('mail', dict(DEFAULT_MAIL_SETTINGS))
