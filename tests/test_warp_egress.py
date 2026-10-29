@@ -3,6 +3,8 @@ import unittest
 from unittest.mock import patch
 
 from managers.wireguard_manager import WireGuardManager
+from managers.awg_manager import AWGManager
+from managers.wireguard_exit_manager import WireGuardExitManager
 
 
 class RecordingSSH:
@@ -35,6 +37,37 @@ class WireGuardWarpEgressTests(unittest.TestCase):
         self.assertIn("default via 172.29.173.2", script)
         self.assertIn("iptables -t nat -A POSTROUTING -s 10.8.2.0/24 -o \"$WARP_IF\" -j MASQUERADE", script)
         self.assertEqual(ssh.commands[-1], "docker restart amnezia-wireguard")
+
+    def test_awg_start_script_has_optional_warp_route(self):
+        script = AWGManager(None)._render_start_script("awg")
+        self.assertIn("# ---- Optional Cloudflare WARP egress for VPN clients ----", script)
+        self.assertIn('ip -4 rule add priority 210 from "$SUBNET" table 51820', script)
+        self.assertIn('iptables -t nat -A POSTROUTING -s "$SUBNET" -o "$WARP_IF" -j MASQUERADE', script)
+
+    def test_wireguard_exit_hooks_and_warp_block_coexist(self):
+        ssh = RecordingSSH()
+        original = """#!/bin/bash
+echo "WireGuard container startup"
+# Start WireGuard
+if [ -f /opt/amnezia/wireguard/wg0.conf ]; then wg-quick up /opt/amnezia/wireguard/wg0.conf; fi
+tail -f /dev/null
+"""
+        config = "[Interface]\\nAddress = 10.8.2.1/24\\n"
+        def run_sudo(command, timeout=60):
+            ssh.commands.append(command)
+            if "cat /opt/amnezia/start.sh" in command:
+                return original, "", 0
+            if "cat /opt/amnezia/wireguard/wg0.conf" in command:
+                return config, "", 0
+            return "", "", 0
+        ssh.run_sudo_command = run_sudo
+
+        WireGuardExitManager(ssh)._write_start_script("wireguard")
+
+        script = ssh.uploads["/tmp/_amnz_wg_start.sh"]
+        self.assertIn("# ---- Exit-node link (panel-managed; driven by", script)
+        self.assertIn("# ---- Optional Cloudflare WARP egress for VPN clients ----", script)
+        self.assertIn("ip -4 rule add priority 210 from 10.8.2.1/24 table 51820", script)
 
     def test_warp_routing_is_conditional_on_gateway_network_interface(self):
         ssh = RecordingSSH()
