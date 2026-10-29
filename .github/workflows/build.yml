@@ -40,14 +40,14 @@ jobs:
     - name: Build Linux
       if: runner.os == 'Linux'
       run: |
-        pyinstaller --name Amnezia-Web-Panel-Linux \\
-          --add-data "static:static" \\
-          --add-data "templates:templates" \\
-          --add-data "translations:translations" \\
-          --hidden-import uvicorn \\
-          --hidden-import fastapi \\
-          --clean \\
-          -y \\
+        pyinstaller --name Amnezia-Web-Panel-Linux \
+          --add-data "static:static" \
+          --add-data "templates:templates" \
+          --add-data "translations:translations" \
+          --hidden-import uvicorn \
+          --hidden-import fastapi \
+          --clean \
+          -y \
           -F app.py
 
     - name: Build Windows
@@ -66,14 +66,14 @@ jobs:
     - name: Build macOS
       if: runner.os == 'macOS'
       run: |
-        pyinstaller --name Amnezia-Web-Panel-macOS \\
-          --add-data "static:static" \\
-          --add-data "templates:templates" \\
-          --add-data "translations:translations" \\
-          --hidden-import uvicorn \\
-          --hidden-import fastapi \\
-          --clean \\
-          -y \\
+        pyinstaller --name Amnezia-Web-Panel-macOS \
+          --add-data "static:static" \
+          --add-data "templates:templates" \
+          --add-data "translations:translations" \
+          --hidden-import uvicorn \
+          --hidden-import fastapi \
+          --clean \
+          -y \
           -F app.py
 
     - name: Upload artifacts
