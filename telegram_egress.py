@@ -109,6 +109,17 @@ class TelegramExitProxy:
         self._thread.start()
         return self
 
+    def check_upstream(self):
+        """Fail early if SSH TCP forwarding to the Telegram API is unavailable."""
+        ssh_client = getattr(self.ssh_manager, "client", None)
+        transport = ssh_client.get_transport() if ssh_client else None
+        if not transport or not transport.is_active():
+            raise RuntimeError("Exit-node SSH connection is unavailable")
+        channel = transport.open_channel(
+            "direct-tcpip", ("api.telegram.org", 443), ("127.0.0.1", 0), timeout=15
+        )
+        channel.close()
+
     def close(self):
         if self._thread and self._thread.is_alive():
             self._server.shutdown()
