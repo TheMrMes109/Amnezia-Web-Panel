@@ -886,5 +886,7 @@
   "warp_egress_enable": "为所有 WG/AWG 启用",
   "warp_egress_disable": "为所有 WG/AWG 禁用",
   "warp_egress_enabled_toast": "已为 WG/AWG 启用 Cloudflare WARP 出口。",
-  "warp_egress_disabled_toast": "已为 WG/AWG 禁用 Cloudflare WARP 出口。"
+  "warp_egress_disabled_toast": "已为 WG/AWG 禁用 Cloudflare WARP 出口。",
+  "warp_egress_confirm_enable": "为所有已安装的 WG/AWG 实例启用 Cloudflare WARP？每个受影响的容器都会短暂重启。",
+  "warp_egress_confirm_disable": "为所有已安装的 WG/AWG 实例禁用 Cloudflare WARP？每个受影响的容器都会短暂重启。"
 }
