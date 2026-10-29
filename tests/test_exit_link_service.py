@@ -188,6 +188,18 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(link['fallback_uids'], [])
         self.assertEqual([event for event in h.events if event[1] == 'add_peer'][-1][0], '203.0.113.9')
 
+    def test_monitor_fails_over_before_general_status_stale_threshold(self):
+        h = Harness()
+        run(h.service.link(0, 'awg2', 'exit-a', fallback_uids=['exit-b']))
+        # The general status endpoint still calls this "up" for up to 300s,
+        # but failover should trigger after 90s without the 25s keepalive.
+        h.awg().status_sequence = [
+            {'up': True, 'handshake_age': 120, 'rx_bytes': 0, 'tx_bytes': 0,
+             'endpoint': '203.0.113.5:55520'}
+        ]
+        run(h.service.monitor_failover())
+        self.assertEqual(h.record()['exit_link']['exit_uid'], 'exit-b')
+
     def test_monitor_continues_to_next_backup_after_failover(self):
         h = Harness()
         run(h.service.link(0, 'awg2', 'exit-a', fallback_uids=['exit-b', 'exit-c']))
