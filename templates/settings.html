@@ -290,6 +290,25 @@
                         </button>
                     </div>
                 </div>
+
+                <div class="tunnel-row" id="warpEgressRow" style="padding: var(--space-md); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-primary); margin-top: var(--space-md);">
+                    <div class="row-between" style="margin-bottom: var(--space-sm);">
+                        <strong>{{ _('warp_egress_title') }}</strong>
+                        <span class="badge badge-secondary" id="warpEgressBadge">{{ _('warp_egress_disabled') }}</span>
+                    </div>
+                    <div id="warpEgressStatusText" class="form-hint" style="margin-bottom: var(--space-sm);">{{ _('warp_egress_hint') }}</div>
+                    <div id="warpEgressCounts" class="form-hint" style="margin-bottom: var(--space-sm);"></div>
+                    <div class="grid-2" style="gap: var(--space-sm);">
+                        <button type="button" class="btn btn-primary" id="warpEgressEnableBtn" onclick="setWarpEgress(true)">
+                            <span id="warpEgressEnableBtnText">{{ _('warp_egress_enable') }}</span>
+                            <div class="spinner hidden" id="warpEgressEnableSpinner" style="width:14px; height:14px;"></div>
+                        </button>
+                        <button type="button" class="btn btn-secondary hidden" id="warpEgressDisableBtn" onclick="setWarpEgress(false)">
+                            <span id="warpEgressDisableBtnText">{{ _('warp_egress_disable') }}</span>
+                            <div class="spinner hidden" id="warpEgressDisableSpinner" style="width:14px; height:14px;"></div>
+                        </button>
+                    </div>
+                </div>
             </div>
             <p class="form-hint" style="margin-top: var(--space-md);">{{ _('tunnels_hint') }}</p>
         </div>
@@ -886,6 +905,61 @@
         }
     }
 
+    function updateWarpEgressStatus(status) {
+        const badge = document.getElementById('warpEgressBadge');
+        const statusText = document.getElementById('warpEgressStatusText');
+        const counts = document.getElementById('warpEgressCounts');
+        const enableBtn = document.getElementById('warpEgressEnableBtn');
+        const disableBtn = document.getElementById('warpEgressDisableBtn');
+        if (!badge || !statusText || !enableBtn || !disableBtn) return;
+        const enabled = !!status.enabled;
+        badge.className = enabled ? 'badge badge-success' : 'badge badge-secondary';
+        badge.textContent = enabled ? _('warp_egress_enabled') : _('warp_egress_disabled');
+        statusText.textContent = enabled ? _('warp_egress_active_hint') : _('warp_egress_hint');
+        counts.textContent = _('warp_egress_counts')
+            .replace('{}', String(status.eligible_instances || 0))
+            .replace('{}', String(status.eligible_servers || 0));
+        enableBtn.classList.toggle('hidden', enabled);
+        disableBtn.classList.toggle('hidden', !enabled);
+    }
+
+    async function loadWarpEgressStatus() {
+        try {
+            const status = await apiCall('/api/settings/warp-egress/status');
+            updateWarpEgressStatus(status);
+        } catch (err) {
+            const statusText = document.getElementById('warpEgressStatusText');
+            if (statusText) statusText.textContent = err.message;
+        }
+    }
+
+    async function setWarpEgress(enabled) {
+        const action = enabled ? 'Enable' : 'Disable';
+        const button = document.getElementById(enabled ? 'warpEgressEnableBtn' : 'warpEgressDisableBtn');
+        const spinner = document.getElementById(enabled ? 'warpEgressEnableSpinner' : 'warpEgressDisableSpinner');
+        const buttonText = document.getElementById(enabled ? 'warpEgressEnableBtnText' : 'warpEgressDisableBtnText');
+        const otherButton = document.getElementById(enabled ? 'warpEgressDisableBtn' : 'warpEgressEnableBtn');
+        if (!button || !spinner || !buttonText) return;
+        button.disabled = true;
+        if (otherButton) otherButton.disabled = true;
+        spinner.classList.remove('hidden');
+        buttonText.textContent = _('loading');
+        try {
+            const result = await apiCall(enabled ? '/api/settings/warp-egress/enable' : '/api/settings/warp-egress/disable', 'POST');
+            updateWarpEgressStatus(result);
+            showToast(enabled ? _('warp_egress_enabled_toast') : _('warp_egress_disabled_toast'), 'success');
+        } catch (err) {
+            showToast(`${_('error')}: ` + err.message, 'error');
+            await loadWarpEgressStatus();
+        } finally {
+            button.disabled = false;
+            if (otherButton) otherButton.disabled = false;
+            spinner.classList.add('hidden');
+            buttonText.textContent = _(enabled ? 'warp_egress_enable' : 'warp_egress_disable');
+            await loadWarpEgressStatus();
+        }
+    }
+
     async function enableTunnel(provider) {
         const btn = document.getElementById(`${provider}TunnelBtn`);
         const spinner = document.getElementById(`${provider}TunnelSpinner`);
@@ -1438,6 +1512,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         loadTokens();
         loadTunnelStatus();
+        loadWarpEgressStatus();
         loadExitNodes();
         tunnelStatusTimer = setInterval(loadTunnelStatus, 10000);
     });
