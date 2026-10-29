@@ -886,5 +886,7 @@
   "warp_egress_enable": "فعال‌سازی برای همهٔ WG/AWG",
   "warp_egress_disable": "غیرفعال‌سازی برای همهٔ WG/AWG",
   "warp_egress_enabled_toast": "خروجی Cloudflare WARP برای WG/AWG فعال شد.",
-  "warp_egress_disabled_toast": "خروجی Cloudflare WARP برای WG/AWG غیرفعال شد."
+  "warp_egress_disabled_toast": "خروجی Cloudflare WARP برای WG/AWG غیرفعال شد.",
+  "warp_egress_confirm_enable": "Cloudflare WARP برای همهٔ نمونه‌های نصب‌شدهٔ WG/AWG فعال شود؟ هر کانتینر مربوط برای مدت کوتاهی راه‌اندازی مجدد می‌شود.",
+  "warp_egress_confirm_disable": "Cloudflare WARP برای همهٔ نمونه‌های نصب‌شدهٔ WG/AWG غیرفعال شود؟ هر کانتینر مربوط برای مدت کوتاهی راه‌اندازی مجدد می‌شود."
 }
