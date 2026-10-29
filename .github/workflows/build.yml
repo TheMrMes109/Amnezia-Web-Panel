@@ -2,7 +2,7 @@ name: Build Binaries
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "BW" ]
     tags:
       - 'v*'
   workflow_dispatch:
@@ -16,6 +16,7 @@ env:
 
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -39,14 +40,14 @@ jobs:
     - name: Build Linux
       if: runner.os == 'Linux'
       run: |
-        pyinstaller --name Amnezia-Web-Panel-Linux \
-          --add-data "static:static" \
-          --add-data "templates:templates" \
-          --add-data "translations:translations" \
-          --hidden-import uvicorn \
-          --hidden-import fastapi \
-          --clean \
-          -y \
+        pyinstaller --name Amnezia-Web-Panel-Linux \\
+          --add-data "static:static" \\
+          --add-data "templates:templates" \\
+          --add-data "translations:translations" \\
+          --hidden-import uvicorn \\
+          --hidden-import fastapi \\
+          --clean \\
+          -y \\
           -F app.py
 
     - name: Build Windows
@@ -65,14 +66,14 @@ jobs:
     - name: Build macOS
       if: runner.os == 'macOS'
       run: |
-        pyinstaller --name Amnezia-Web-Panel-macOS \
-          --add-data "static:static" \
-          --add-data "templates:templates" \
-          --add-data "translations:translations" \
-          --hidden-import uvicorn \
-          --hidden-import fastapi \
-          --clean \
-          -y \
+        pyinstaller --name Amnezia-Web-Panel-macOS \\
+          --add-data "static:static" \\
+          --add-data "templates:templates" \\
+          --add-data "translations:translations" \\
+          --hidden-import uvicorn \\
+          --hidden-import fastapi \\
+          --clean \\
+          -y \\
           -F app.py
 
     - name: Upload artifacts
@@ -83,6 +84,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/BW' || startsWith(github.ref, 'refs/tags/v')
 
     permissions:
       contents: read
@@ -93,13 +95,20 @@ jobs:
       matrix:
         include:
           - variant: default
+            image_name: amnezia-panel
             dockerfile: Dockerfile
             suffix: ''
             platforms: linux/amd64,linux/arm64
           - variant: warp
+            image_name: amnezia-panel
             dockerfile: Dockerfile.warp
             suffix: '-warp'
             platforms: linux/amd64
+          - variant: bw
+            image_name: amnezia-panel-bw
+            dockerfile: Dockerfile
+            suffix: ''
+            platforms: linux/amd64,linux/arm64
 
     steps:
     - uses: actions/checkout@v4
@@ -108,7 +117,7 @@ jobs:
       id: image
       run: |
         owner=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-        echo "name=ghcr.io/${owner}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+        echo "name=ghcr.io/${owner}/${{ matrix.image_name }}" >> "$GITHUB_OUTPUT"
 
     - name: Log in to GHCR
       uses: docker/login-action@v3
@@ -132,17 +141,18 @@ jobs:
           latest=false
           ${{ matrix.suffix != '' && format('suffix={0},onlatest=true', matrix.suffix) || '' }}
         tags: |
-          type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+          type=raw,value=latest,enable=${{ (matrix.variant == 'bw' && github.ref == 'refs/heads/BW') || (matrix.variant != 'bw' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))) }}
           type=ref,event=branch
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
           type=sha,format=short
         labels: |
-          org.opencontainers.image.title=Amnezia Web Panel${{ matrix.suffix }}
+          org.opencontainers.image.title=Amnezia Web Panel${{ matrix.variant == 'bw' && ' BW' || matrix.suffix }}
           org.opencontainers.image.description=Web panel for managing Amnezia VPN servers
 
     - name: Build and push
+      if: (matrix.variant == 'bw' && github.ref == 'refs/heads/BW') || (matrix.variant != 'bw' && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
       uses: docker/build-push-action@v6
       with:
         context: .
@@ -155,9 +165,12 @@ jobs:
         cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
 
     - name: Job summary
+      if: (matrix.variant == 'bw' && github.ref == 'refs/heads/BW') || (matrix.variant != 'bw' && (github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))
       run: |
         {
           echo "### Docker: ${{ matrix.variant }} (${{ matrix.dockerfile }})"
+          echo
+          echo "Image: ${{ steps.image.outputs.name }}"
           echo
           echo "Platforms: \`${{ matrix.platforms }}\`"
           echo
