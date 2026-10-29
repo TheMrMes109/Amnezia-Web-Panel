@@ -32,7 +32,7 @@ warp-cli --accept-tos connect
 for attempt in $(seq 1 90); do
     warp-cli --accept-tos status >/tmp/warp-status.txt 2>&1 || true
     WARP_IF=$(ip -o link show | awk -F': ' '$2 ~ /CloudflareWARP|warp/ {gsub(/@.*/, "", $2); print $2; exit}')
-    if grep -Eqi 'connected' /tmp/warp-status.txt && [ -n "$WARP_IF" ]; then
+    if grep -Eqi '(^|[[:space:]])Connected([[:space:]]|$)' /tmp/warp-status.txt && [ -n "$WARP_IF" ]; then
         break
     fi
     sleep 1
