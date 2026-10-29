@@ -934,7 +934,7 @@
     }
 
     async function setWarpEgress(enabled) {
-        const action = enabled ? 'Enable' : 'Disable';
+        if (!confirm(_(enabled ? 'warp_egress_confirm_enable' : 'warp_egress_confirm_disable'))) return;
         const button = document.getElementById(enabled ? 'warpEgressEnableBtn' : 'warpEgressDisableBtn');
         const spinner = document.getElementById(enabled ? 'warpEgressEnableSpinner' : 'warpEgressDisableSpinner');
         const buttonText = document.getElementById(enabled ? 'warpEgressEnableBtnText' : 'warpEgressDisableBtnText');
