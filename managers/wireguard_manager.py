@@ -374,6 +374,7 @@ WARP_IF=$(ip -o -4 addr show | awk '$4 ~ /^172.29.173\./ {{print $2; exit}}')
 if [ -n "$WARP_IF" ]; then
     ip -4 route replace 172.29.173.0/24 dev "$WARP_IF" table 51820
     ip -4 route replace default via 172.29.173.2 dev "$WARP_IF" table 51820
+    iptables -t nat -C POSTROUTING -s {subnet_ip}/{subnet_cidr} -o "$WARP_IF" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {subnet_ip}/{subnet_cidr} -o "$WARP_IF" -j MASQUERADE
     while ip -4 rule del priority 210 from {subnet_ip}/{subnet_cidr} table 51820 2>/dev/null; do :; done
     ip -4 rule add priority 210 from {subnet_ip}/{subnet_cidr} table 51820
 fi
