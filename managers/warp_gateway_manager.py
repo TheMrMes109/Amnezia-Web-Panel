@@ -14,6 +14,9 @@ WARP_IMAGE = "amnezia-warp-gateway:local"
 WARP_SUBNET = "172.29.173.0/24"
 WARP_GATEWAY_IP = "172.29.173.2"
 WARP_NETWORK_GATEWAY = "172.29.173.1"
+WARP_SUBNET6 = "fd42:173::/64"
+WARP_GATEWAY_IP6 = "fd42:173::2"
+WARP_NETWORK_GATEWAY6 = "fd42:173::1"
 WARP_ROOT = "/opt/amnezia/warp-gateway"
 
 
@@ -42,12 +45,26 @@ class WarpGatewayManager:
     def ensure_gateway(self, timeout=180):
         """Build and start the isolated WARP gateway, waiting for a live tunnel."""
         self._run(f"mkdir -p {WARP_ROOT}/state")
-        self._run(
-            f"docker network inspect {WARP_NETWORK} >/dev/null 2>&1 || "
-            f"docker network create --driver bridge --subnet {WARP_SUBNET} "
-            f"--gateway {WARP_NETWORK_GATEWAY} {WARP_NETWORK}",
+        if not self.network_exists():
+            dual_stack = (
+                f"docker network create --driver bridge --ipv6 "
+                f"--subnet {WARP_SUBNET} --gateway {WARP_NETWORK_GATEWAY} "
+                f"--subnet {WARP_SUBNET6} --gateway {WARP_NETWORK_GATEWAY6} {WARP_NETWORK}"
+            )
+            _out, _err, network_code = self.ssh.run_sudo_command(dual_stack, timeout=30)
+            if network_code != 0:
+                # Some Docker hosts have IPv6 disabled. Keep IPv4 WARP usable;
+                # the AWG startup hook will block IPv6 rather than leak it.
+                self._run(
+                    f"docker network create --driver bridge --subnet {WARP_SUBNET} "
+                    f"--gateway {WARP_NETWORK_GATEWAY} {WARP_NETWORK}",
+                    timeout=30,
+                )
+        network_info, _network_err, network_info_code = self.ssh.run_sudo_command(
+            f"docker network inspect -f '{{{{range .IPAM.Config}}}}{{{{.Subnet}}}} {{{{end}}}}' {WARP_NETWORK}",
             timeout=30,
         )
+        ipv6_enabled = network_info_code == 0 and WARP_SUBNET6 in network_info
 
         _out, _err, exists_code = self.ssh.run_sudo_command(
             f"docker inspect {WARP_CONTAINER} >/dev/null 2>&1"
@@ -61,7 +78,9 @@ class WarpGatewayManager:
                 f"--device /dev/net/tun:/dev/net/tun --cap-add NET_ADMIN "
                 f"--sysctl net.ipv4.ip_forward=1 "
                 f"--network {WARP_NETWORK} --ip {WARP_GATEWAY_IP} "
-                f"-e WARP_SUBNET={WARP_SUBNET} "
+                f"{('--ip6 ' + WARP_GATEWAY_IP6 + ' ') if ipv6_enabled else ''}"
+                f"-e WARP_SUBNET={WARP_SUBNET} -e WARP_SUBNET6={WARP_SUBNET6} "
+                f"-e WARP_IPV6_ENABLED={'1' if ipv6_enabled else '0'} "
                 f"-v {WARP_ROOT}/state:/var/lib/cloudflare-warp "
                 f"--name {WARP_CONTAINER} {WARP_IMAGE}",
                 timeout=60,
