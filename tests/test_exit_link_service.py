@@ -464,7 +464,7 @@ class UnlinkAndLifecycleTests(unittest.TestCase):
         h.data['servers'].append({'name': 'Rome', 'host': '198.51.100.2', 'uid': 'entry-2',
                                   'protocols': {'awg': {'installed': True}}})
         run(h.service.link(0, 'awg2', 'exit-a'))
-        run(h.service.link(3, 'awg', 'exit-a'))
+        run(h.service.link(4, 'awg', 'exit-a'))
         h.unreachable.add('198.51.100.2')
         results = run(h.service.detach_entries_for_exit('exit-a', 'exit_uninstalled'))
         self.assertEqual([r['status'] for r in results], ['success', 'error'])
