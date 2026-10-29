@@ -452,7 +452,7 @@ class UnlinkAndLifecycleTests(unittest.TestCase):
         h.data['servers'].append({'name': 'Rome', 'host': '198.51.100.2', 'uid': 'entry-2',
                                   'protocols': {'awg': {'installed': True}}})
         run(h.service.link(0, 'awg2', 'exit-a'))
-        run(h.service.link(3, 'awg', 'exit-a'))
+        run(h.service.link(4, 'awg', 'exit-a'))
         h.unreachable.add('198.51.100.2')
         results = run(h.service.relink_entries_for_exit('exit-a'))
         self.assertEqual([(r['name'], r['protocol'], r['status']) for r in results],
@@ -469,7 +469,7 @@ class UnlinkAndLifecycleTests(unittest.TestCase):
         results = run(h.service.detach_entries_for_exit('exit-a', 'exit_uninstalled'))
         self.assertEqual([r['status'] for r in results], ['success', 'error'])
         self.assertNotIn('exit_link', h.record(0, 'awg2'))
-        self.assertEqual(h.record(3, 'awg')['exit_link']['stale'], 'exit_uninstalled')
+        self.assertEqual(h.record(4, 'awg')['exit_link']['stale'], 'exit_uninstalled')
         self.assertEqual(h.service.linked_entries(h.data, 'exit-a')[0]['stale'], 'exit_uninstalled')
 
     def test_forget_entry_peers(self):
@@ -487,7 +487,7 @@ class UnlinkAndLifecycleTests(unittest.TestCase):
         self.assertEqual(status['exit_mtu'], 1420)
         nodes = h.service.list_exit_nodes(h.data)
         self.assertEqual([(n['uid'], n['server_id'], n['obfuscation']) for n in nodes],
-                         [('exit-a', 1, False), ('exit-b', 2, True)])
+                         [('exit-a', 1, False), ('exit-b', 2, True), ('exit-c', 3, False)])
         self.assertEqual(h.service.linked_entries(h.data, 'exit-a'),
                          [{'server_id': 0, 'server_uid': 'entry-uid', 'name': 'Paris', 'protocol': 'awg2', 'stale': None}])
         self.assertEqual(h.service.linked_entries(h.data, ''), [])
