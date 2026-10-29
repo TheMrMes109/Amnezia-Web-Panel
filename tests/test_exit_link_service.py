@@ -123,13 +123,24 @@ class FakeExit:
         return True
 
 
+class FakePlainExit(FakeExit):
+    def add_peer(self, peer_id, name, public_key):
+        self.calls.append(('add_peer', peer_id, name, public_key))
+        self.events.append((self.host, 'add_peer_plain'))
+        if self.add_error:
+            raise RuntimeError(self.add_error)
+        return {'transit_ip': '10.10.0.7', 'psk': 'PSK', 'public_key': f'PLAIN-EXITPUB-{self.host}',
+                'port': '55521', 'subnet': '10.10.0.0/24', 'obfuscation': False, 'awg_params': {}}
+
+
 class Harness:
-    """In-memory data.json plus one fake manager per host, injected the way app.py wires the real ones."""
+    """In-memory data.json plus fake managers, injected like app.py."""
 
     def __init__(self, data=None):
         self.data = data or base_data()
         self.awgs = {}
         self.exits = {}
+        self.plain_exits = {}
         self.unreachable = set()
         self.sleeps = []
         self.events = []
@@ -149,6 +160,7 @@ class Harness:
             get_ssh=get_ssh,
             awg_manager_factory=lambda host: self.awgs.setdefault(host, FakeAWG(host, self.events)),
             exit_manager_factory=lambda host: self.exits.setdefault(host, FakeExit(host, self.events)),
+            wireguard_exit_manager_factory=lambda host: self.plain_exits.setdefault(host, FakePlainExit(host, self.events)),
             protocol_base=protocol_base,
             awg_protocols=AWG_PROTOCOLS,
             protocol_display_name=lambda p: {'awg2': 'AmneziaWG 2.0'}.get(p, p),
@@ -184,7 +196,25 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(result['status'], 'success')
         self.assertEqual(result['exit_link']['exit_uid'], 'exit-a')
         self.assertEqual(h.awg().calls[0], ('exit_prepare_keys', 'wireguard'))
-        self.assertEqual(h.exit().calls[0][0], 'add_peer')
+        self.assertEqual(h.plain_exits['203.0.113.5'].calls[0][0], 'add_peer')
+        self.assertEqual(result['exit_link']['endpoint_port'], '55521')
+        self.assertEqual(result['exit_link']['transit_ip'], '10.10.0.7')
+        self.assertEqual(result['exit_link']['endpoint_port'], '55521')
+        self.assertEqual(result['exit_link']['transit_ip'], '10.10.0.7')
+
+    def test_standard_wireguard_can_link_to_an_obfuscated_exit_via_plain_endpoint(self):
+        h = Harness()
+        h.data['servers'][0]['protocols']['wireguard'] = {'installed': True, 'port': '51820'}
+        h.service.wireguard_manager_factory = lambda host: h.awg(host)
+
+        result = run(h.service.link(0, 'wireguard', 'exit-b'))
+
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['exit_link']['exit_uid'], 'exit-b')
+        self.assertFalse(result['exit_link']['obfuscation'])
+        self.assertEqual(result['exit_link']['endpoint_port'], '55521')
+        self.assertEqual(h.plain_exits['203.0.113.9'].calls[0][0], 'add_peer')
+        self.assertEqual(h.exits.get('203.0.113.9'), None)
 
     def test_monitor_switches_to_the_next_configured_exit(self):
         h = Harness()
