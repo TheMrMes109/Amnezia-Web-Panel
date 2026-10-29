@@ -106,7 +106,7 @@ class ExitLinkService:
             raise ExitLinkError('server_not_found', 'Server not found', 404)
         server = servers[server_id]
         if self.protocol_base(protocol) not in self.awg_protocols and self.protocol_base(protocol) != 'wireguard':
-            raise ExitLinkError('protocol_not_supported', 'Only AmneziaWG and standard WireGuard instances can be linked to an exit node')
+            raise ExitLinkError('protocol_not_awg', 'Only AmneziaWG and standard WireGuard instances can be linked to an exit node')
         rec = (server.get('protocols') or {}).get(protocol)
         if not rec or not rec.get('installed'):
             raise ExitLinkError('protocol_not_installed', f'{protocol} is not installed on this server')
