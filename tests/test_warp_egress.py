@@ -77,6 +77,7 @@ tail -f /dev/null
         self.assertIn("# ---- Exit-node link (panel-managed; driven by", script)
         self.assertIn("# ---- Optional Cloudflare WARP egress for VPN clients ----", script)
         self.assertIn("ip -4 rule add priority 210 from 10.8.2.1/24 table 51820", script)
+        self.assertIn("ip -6 rule add priority 210 iif wg0 prohibit", script)
 
     def test_warp_routing_is_conditional_on_gateway_network_interface(self):
         ssh = RecordingSSH()
