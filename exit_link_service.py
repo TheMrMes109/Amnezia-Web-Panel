@@ -257,7 +257,14 @@ class ExitLinkService:
             elif exit_uid not in priority:
                 priority = [exit_uid] + priority
             for backup_uid in priority[1:]:
-                backup_srv, backup_rec = self._exit(data, backup_uid)
+                try:
+                    backup_srv, backup_rec = self._exit(data, backup_uid)
+                except ExitLinkError:
+                    # A previously configured backup may later be removed. It
+                    # must not prevent a still-installed backup from working.
+                    if priority_uids is not None:
+                        continue
+                    raise
                 if backup_srv.get('uid') == entry['uid']:
                     raise ExitLinkError('exit_self', 'A server cannot be its own exit node')
                 if self.protocol_base(protocol) == 'awg_legacy' and backup_rec.get('obfuscation'):
