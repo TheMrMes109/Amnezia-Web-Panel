@@ -370,13 +370,15 @@ iptables -t nat -A POSTROUTING -s {subnet_ip}/{subnet_cidr} -o eth1 -j MASQUERAD
 
 # Optional Cloudflare WARP egress: only packets originating from VPN clients
 # use the isolated gateway. The server's WireGuard endpoint/SSH keep main routing.
+WARP_SUBNET=$(grep '^Address' {self.CONFIG_PATH} | head -1 | cut -d'=' -f2 | cut -d',' -f1 | tr -d ' ')
+[ -n "$WARP_SUBNET" ] || WARP_SUBNET={subnet_ip}/{subnet_cidr}
 WARP_IF=$(ip -o -4 addr show | awk '$4 ~ /^172.29.173\./ {{print $2; exit}}')
 if [ -n "$WARP_IF" ]; then
     ip -4 route replace 172.29.173.0/24 dev "$WARP_IF" table 51820
     ip -4 route replace default via 172.29.173.2 dev "$WARP_IF" table 51820
-    iptables -t nat -C POSTROUTING -s {subnet_ip}/{subnet_cidr} -o "$WARP_IF" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s {subnet_ip}/{subnet_cidr} -o "$WARP_IF" -j MASQUERADE
-    while ip -4 rule del priority 210 from {subnet_ip}/{subnet_cidr} table 51820 2>/dev/null; do :; done
-    ip -4 rule add priority 210 from {subnet_ip}/{subnet_cidr} table 51820
+    iptables -t nat -C POSTROUTING -s "$WARP_SUBNET" -o "$WARP_IF" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$WARP_SUBNET" -o "$WARP_IF" -j MASQUERADE
+    while ip -4 rule del priority 210 from "$WARP_SUBNET" table 51820 2>/dev/null; do :; done
+    ip -4 rule add priority 210 from "$WARP_SUBNET" table 51820
     # Standard WG instances have no server-side IPv6 client subnet; block any
     # forwarded IPv6 packet rather than letting it bypass the IPv4 WARP gateway.
     while ip -6 rule del priority 210 iif {self.INTERFACE} prohibit 2>/dev/null; do :; done
