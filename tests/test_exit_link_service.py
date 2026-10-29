@@ -199,8 +199,6 @@ class LinkTests(unittest.TestCase):
         self.assertEqual(h.plain_exits['203.0.113.5'].calls[0][0], 'add_peer')
         self.assertEqual(result['exit_link']['endpoint_port'], '55521')
         self.assertEqual(result['exit_link']['transit_ip'], '10.10.0.7')
-        self.assertEqual(result['exit_link']['endpoint_port'], '55521')
-        self.assertEqual(result['exit_link']['transit_ip'], '10.10.0.7')
 
     def test_standard_wireguard_can_link_to_an_obfuscated_exit_via_plain_endpoint(self):
         h = Harness()
