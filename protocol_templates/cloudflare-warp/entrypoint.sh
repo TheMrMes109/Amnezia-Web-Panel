@@ -56,6 +56,7 @@ iptables -C FORWARD -i "$WARP_IF" -o eth0 -m conntrack --ctstate ESTABLISHED,REL
 iptables -t nat -C POSTROUTING -s "$WARP_SUBNET" -o "$WARP_IF" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$WARP_SUBNET" -o "$WARP_IF" -j MASQUERADE
 
 if [ "$WARP_IPV6_ENABLED" = "1" ]; then
+    sysctl -w net.ipv6.conf.all.forwarding=1 >/dev/null 2>&1 || true
     ip -6 route replace "$WARP_SUBNET6" dev eth0 table 51822
     ip -6 route replace default dev "$WARP_IF" table 51822
     while ip -6 rule del priority 210 from "$WARP_SUBNET6" table 51822 2>/dev/null; do :; done
