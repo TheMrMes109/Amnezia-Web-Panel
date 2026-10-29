@@ -1806,6 +1806,18 @@ fi
             '  iptables -t nat -C POSTROUTING -s "$SUBNET" -o "$WARP_IF" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$SUBNET" -o "$WARP_IF" -j MASQUERADE\n'
             '  while ip -4 rule del priority 210 from "$SUBNET" table 51820 2>/dev/null; do :; done\n'
             '  ip -4 rule add priority 210 from "$SUBNET" table 51820\n'
+            '  if [ -n "$SUBNET6" ]; then\n'
+            '    if ip -6 addr show dev "$WARP_IF" | grep -q "fd42:173::"; then\n'
+            '      ip -6 route replace fd42:173::/64 dev "$WARP_IF" table 51822\n'
+            '      ip -6 route replace default via fd42:173::2 dev "$WARP_IF" table 51822\n'
+            '      ip6tables -t nat -C POSTROUTING -s "$SUBNET6" -o "$WARP_IF" -j MASQUERADE 2>/dev/null || ip6tables -t nat -A POSTROUTING -s "$SUBNET6" -o "$WARP_IF" -j MASQUERADE || true\n'
+            '      while ip -6 rule del priority 210 from "$SUBNET6" table 51822 2>/dev/null; do :; done\n'
+            '      ip -6 rule add priority 210 from "$SUBNET6" table 51822\n'
+            '    else\n'
+            '      while ip -6 rule del priority 210 from "$SUBNET6" prohibit 2>/dev/null; do :; done\n'
+            '      ip -6 rule add priority 210 from "$SUBNET6" prohibit\n'
+            '    fi\n'
+            '  fi\n'
             'fi\n'
         )
         return self._start_script_body(
