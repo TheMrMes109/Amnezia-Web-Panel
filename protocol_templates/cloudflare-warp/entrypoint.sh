@@ -45,6 +45,7 @@ if [ -z "$WARP_IF" ]; then
 fi
 
 sysctl -w net.ipv4.ip_forward=1 >/dev/null
+ip route replace 172.29.173.0/24 dev eth0 table 51821
 ip route replace default dev "$WARP_IF" table 51821
 while ip rule del priority 210 from "$WARP_SUBNET" table 51821 2>/dev/null; do :; done
 ip rule add priority 210 from "$WARP_SUBNET" table 51821
