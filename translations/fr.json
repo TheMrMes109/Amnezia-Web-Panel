@@ -886,5 +886,7 @@
   "warp_egress_enable": "Activer pour tous les WG/AWG",
   "warp_egress_disable": "Désactiver pour tous les WG/AWG",
   "warp_egress_enabled_toast": "La sortie Cloudflare WARP est activée pour WG/AWG.",
-  "warp_egress_disabled_toast": "La sortie Cloudflare WARP est désactivée pour WG/AWG."
+  "warp_egress_disabled_toast": "La sortie Cloudflare WARP est désactivée pour WG/AWG.",
+  "warp_egress_confirm_enable": "Activer Cloudflare WARP pour toutes les instances WG/AWG installées ? Chaque conteneur concerné redémarrera brièvement.",
+  "warp_egress_confirm_disable": "Désactiver Cloudflare WARP pour toutes les instances WG/AWG installées ? Chaque conteneur concerné redémarrera brièvement."
 }
