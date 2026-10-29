@@ -4714,6 +4714,14 @@ async def api_install_protocol(request: Request, server_id: int, req: InstallPro
                     status_code=400)
 
         docker_install_log = await asyncio.to_thread(ensure_docker_installed, ssh)
+        # If global WARP egress is enabled, prepare its isolated gateway before
+        # installing a new WG/AWG instance. The manager will attach the new
+        # container to amnezia-warp-net before its startup script runs.
+        if data.get('settings', {}).get('warp_egress_enabled') and (
+            install_base in AWG_PROTOCOLS or install_base == 'wireguard'
+        ):
+            from managers.warp_gateway_manager import WarpGatewayManager
+            await asyncio.to_thread(WarpGatewayManager(ssh).ensure_gateway)
         manager = get_protocol_manager(ssh, install_protocol)
 
         # Pass parameters to installer
@@ -7758,6 +7766,152 @@ async def api_warp_disconnect(request: Request):
     except Exception as e:
         logger.exception("Error disconnecting Cloudflare WARP")
         return JSONResponse({'error': str(e)}, status_code=500)
+
+
+def _warp_egress_protocols(server):
+    """Installed WG/AWG instances that should use the global WARP gateway."""
+    found = []
+    for proto, record in (server.get('protocols') or {}).items():
+        if not isinstance(record, dict) or not record.get('installed'):
+            continue
+        base = protocol_base(proto)
+        if base in AWG_PROTOCOLS or base == 'wireguard':
+            found.append((proto, record))
+    return found
+
+
+def _warp_refresh_protocol(ssh, proto):
+    """Regenerate the persistent startup script without dropping exit-link hooks."""
+    if protocol_base(proto) == 'wireguard':
+        from managers.wireguard_exit_manager import WireGuardExitManager
+        manager = WireGuardExitManager(ssh)
+    else:
+        manager = AWGManager(ssh)
+    manager._upload_start_script(proto)
+
+
+async def _set_server_warp_egress(server, protocols, enabled):
+    """Enable/disable WARP routing on all WG/AWG containers on one remote host."""
+    from managers.warp_gateway_manager import WarpGatewayManager
+
+    ssh = await asyncio.to_thread(get_ssh, server)
+    gateway = WarpGatewayManager(ssh)
+    try:
+        if enabled:
+            await asyncio.to_thread(gateway.ensure_gateway)
+            for proto, record in protocols:
+                container = record.get('container_name') or protocol_container_name(proto)
+                if not container:
+                    continue
+                await asyncio.to_thread(gateway.attach_container, container)
+                await asyncio.to_thread(_warp_refresh_protocol, ssh, proto)
+        else:
+            for proto, record in protocols:
+                container = record.get('container_name') or protocol_container_name(proto)
+                if not container:
+                    continue
+                await asyncio.to_thread(gateway.detach_container, container)
+                await asyncio.to_thread(_warp_refresh_protocol, ssh, proto)
+            if await asyncio.to_thread(gateway.network_exists):
+                await asyncio.to_thread(gateway.remove_gateway)
+    finally:
+        try:
+            ssh.disconnect()
+        except Exception:
+            pass
+
+
+@app.get('/api/settings/warp-egress/status', tags=["Settings"])
+async def api_warp_egress_status(request: Request):
+    if not _check_admin(request):
+        return JSONResponse({'error': 'Forbidden'}, status_code=403)
+    data = load_data()
+    servers = [
+        server for server in data.get('servers', [])
+        if _warp_egress_protocols(server)
+    ]
+    return {
+        'enabled': bool((data.get('settings') or {}).get('warp_egress_enabled', False)),
+        'eligible_servers': len(servers),
+        'eligible_instances': sum(len(_warp_egress_protocols(server)) for server in servers),
+    }
+
+
+@app.post('/api/settings/warp-egress/enable', tags=["Settings"])
+async def api_warp_egress_enable(request: Request):
+    if not _check_admin(request):
+        return JSONResponse({'error': 'Forbidden'}, status_code=403)
+    data = load_data()
+    servers = [
+        server for server in data.get('servers', [])
+        if _warp_egress_protocols(server)
+    ]
+    applied = []
+    failures = []
+    try:
+        for server in servers:
+            protocols = _warp_egress_protocols(server)
+            # Include the current host in rollback even if attachment fails halfway.
+            applied.append((server, protocols))
+            try:
+                await _set_server_warp_egress(server, protocols, True)
+            except Exception as exc:
+                failures.append({'server': server.get('name') or server.get('host', '?'), 'error': str(exc)})
+                break
+        if failures:
+            for server, protocols in reversed(applied):
+                try:
+                    await _set_server_warp_egress(server, protocols, False)
+                except Exception as rollback_exc:
+                    logger.exception("WARP egress rollback failed on %s", server.get('host'))
+                    failures.append({'server': server.get('name') or server.get('host', '?'),
+                                     'rollback_error': str(rollback_exc)})
+            return JSONResponse({
+                'error': 'Could not enable Cloudflare WARP on every WG/AWG server; changes were rolled back where possible.',
+                'failures': failures,
+            }, status_code=502)
+        data.setdefault('settings', {})['warp_egress_enabled'] = True
+        save_data(data)
+        return {
+            'status': 'success', 'enabled': True,
+            'eligible_servers': len(servers),
+            'eligible_instances': sum(len(items) for _server, items in applied),
+        }
+    except Exception as exc:
+        logger.exception("Could not enable global Cloudflare WARP egress")
+        return JSONResponse({'error': str(exc), 'failures': failures}, status_code=500)
+
+
+@app.post('/api/settings/warp-egress/disable', tags=["Settings"])
+async def api_warp_egress_disable(request: Request):
+    if not _check_admin(request):
+        return JSONResponse({'error': 'Forbidden'}, status_code=403)
+    data = load_data()
+    failures = []
+    for server in data.get('servers', []):
+        protocols = _warp_egress_protocols(server)
+        try:
+            from managers.warp_gateway_manager import WarpGatewayManager
+            ssh = await asyncio.to_thread(get_ssh, server)
+            try:
+                gateway = WarpGatewayManager(ssh)
+                if protocols or await asyncio.to_thread(gateway.network_exists):
+                    await _set_server_warp_egress(server, protocols, False)
+            finally:
+                try:
+                    ssh.disconnect()
+                except Exception:
+                    pass
+        except Exception as exc:
+            failures.append({'server': server.get('name') or server.get('host', '?'), 'error': str(exc)})
+    if failures:
+        return JSONResponse({
+            'error': 'WARP egress could not be disabled on every server; the setting remains enabled to reflect possible active routes.',
+            'failures': failures,
+        }, status_code=502)
+    data.setdefault('settings', {})['warp_egress_enabled'] = False
+    save_data(data)
+    return {'status': 'success', 'enabled': False}
 
 
 # @app.post('/api/settings/save')
