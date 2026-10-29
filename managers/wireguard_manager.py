@@ -385,7 +385,9 @@ if [ -n "$WARP_IF" ]; then
     while ip -6 rule del priority 210 iif {self.INTERFACE} prohibit 2>/dev/null; do :; done
     ip -6 rule add priority 210 iif {self.INTERFACE} prohibit
 elif [ -f /opt/amnezia/warp-egress.enabled ]; then
-    # Gateway interface vanished while WARP is enabled: fail closed.
+    # Gateway interface vanished while WARP is enabled: remove stale routes and fail closed.
+    while ip -4 rule del priority 210 from "$WARP_SUBNET" table 51820 2>/dev/null; do :; done
+    ip -4 route flush table 51820 2>/dev/null || true
     while ip -4 rule del priority 210 from "$WARP_SUBNET" prohibit 2>/dev/null; do :; done
     ip -4 rule add priority 210 from "$WARP_SUBNET" prohibit
     while ip -6 rule del priority 210 iif {self.INTERFACE} prohibit 2>/dev/null; do :; done
