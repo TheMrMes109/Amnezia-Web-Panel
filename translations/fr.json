@@ -470,6 +470,8 @@
   "exit_link_title": "Nœud de sortie",
   "exit_link_desc": "Acheminez le trafic de tous les clients de cette instance via un autre serveur du panneau. La liaison entre les nœuds est chiffrée ; les clients conservent leurs configurations. IPv4 uniquement : tant que la liaison est active, le trafic IPv6 des clients est bloqué pour éviter toute fuite depuis ce serveur.",
   "exit_link_select": "Nœud de sortie",
+  "exit_link_fallbacks": "Nœuds de sortie de secours",
+  "exit_link_fallbacks_hint": "Si le nœud de sortie actuel cesse de fonctionner, le panneau essaiera ces serveurs dans l’ordre de sélection.",
   "exit_link_none": "Le trafic sort directement depuis ce serveur.",
   "exit_link_current": "Lié à {name} (transit {ip})",
   "exit_link_via": "Nœud de sortie",
