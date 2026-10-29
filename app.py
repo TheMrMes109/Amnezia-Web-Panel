@@ -334,7 +334,8 @@ def load_data():
     })
     settings.setdefault('captcha', {'enabled': False})
     settings.setdefault('exit_nodes', {'default_exit_uid': ''})
-    settings.setdefault('telegram', {'token': '', 'enabled': False})
+    settings.setdefault('telegram', {'token': '', 'enabled': False, 'exit_node_uid': ''})
+    settings['telegram'].setdefault('exit_node_uid', '')
     mail = settings.setdefault('mail', dict(DEFAULT_MAIL_SETTINGS))
     for key, value in DEFAULT_MAIL_SETTINGS.items():
         mail.setdefault(key, value)
@@ -413,6 +414,21 @@ def get_ssh(server):
         ssh.pooled = True
     ssh.ensure_connected()
     return ssh
+
+
+def _telegram_exit_node_server(data):
+    """Resolve the configured Telegram egress node to an installed exit server."""
+    uid = ((data.get('settings') or {}).get('telegram') or {}).get('exit_node_uid', '')
+    uid = (uid or '').strip()
+    if not uid:
+        return None
+    for server in data.get('servers', []):
+        if server.get('uid') != uid:
+            continue
+        exit_record = ((server.get('protocols') or {}).get('exit') or {})
+        if exit_record.get('installed'):
+            return server
+    return None
 
 
 def drop_ssh(server):
@@ -2629,6 +2645,7 @@ class DuckDNSApplyRequest(BaseModel):
 class TelegramSettings(BaseModel):
     token: str = ''
     enabled: bool = False
+    exit_node_uid: str = ''
 
 
 class MailSettings(BaseModel):
@@ -2920,8 +2937,17 @@ async def startup():
     # Start Telegram bot if enabled
     tg_cfg = data.get('settings', {}).get('telegram', {})
     if tg_cfg.get('enabled') and tg_cfg.get('token'):
-        logger.info("Starting Telegram bot from saved settings...")
-        tg_bot.launch_bot(tg_cfg['token'], load_data, generate_vpn_link, save_data, self_service_svc=self_service_connections)
+        exit_uid = (tg_cfg.get('exit_node_uid') or '').strip()
+        exit_server = _telegram_exit_node_server(data)
+        if exit_uid and not exit_server:
+            logger.error("Telegram bot has an invalid configured exit node; refusing direct fallback")
+        else:
+            logger.info("Starting Telegram bot from saved settings...")
+            tg_bot.launch_bot(
+                tg_cfg['token'], load_data, generate_vpn_link, save_data,
+                self_service_svc=self_service_connections,
+                exit_node_server=exit_server, ssh_factory=get_ssh,
+            )
 
 
 def _auto_backup_due(auto_backup: dict, now: Optional[datetime] = None) -> bool:
@@ -7749,11 +7775,17 @@ async def api_warp_disconnect(request: Request):
 #     return {'status': 'success'}
 
 @app.post('/api/settings/save', tags=["Settings"])
-def save_settings(request: Request, payload: SaveSettingsRequest):
+async def save_settings(request: Request, payload: SaveSettingsRequest):
     if not _check_admin(request):
         return JSONResponse({'error': 'Forbidden'}, status_code=403)
     data = load_data()
     settings = data.setdefault('settings', {})
+    telegram_exit_uid = (payload.telegram.exit_node_uid or '').strip()
+    if telegram_exit_uid and not any(
+        node.get('uid') == telegram_exit_uid
+        for node in exit_link_svc.list_exit_nodes(data)
+    ):
+        return JSONResponse({'error': 'Telegram exit node not found or not installed'}, status_code=400)
     settings['appearance'] = payload.appearance.dict()
     settings['sync'] = payload.sync.dict()
     settings['captcha'] = payload.captcha.dict()
@@ -7786,16 +7818,18 @@ def save_settings(request: Request, payload: SaveSettingsRequest):
     save_data(data)
     logger.info("Settings saved (including captcha, telegram and auto backup)")
 
-    # Handle bot start/stop based on new telegram settings
+    # Restart the bot so token/egress-node changes take effect immediately.
     tg_cfg = payload.telegram
+    if tg_bot.is_running():
+        await tg_bot.stop_bot()
     if tg_cfg.enabled and tg_cfg.token:
-        if not tg_bot.is_running():
-            logger.info("Starting Telegram bot (settings save)...")
-            tg_bot.launch_bot(tg_cfg.token, load_data, generate_vpn_link, save_data, self_service_svc=self_service_connections)
-    else:
-        if tg_bot.is_running():
-            logger.info("Stopping Telegram bot (settings save)...")
-            asyncio.create_task(tg_bot.stop_bot())
+        exit_server = _telegram_exit_node_server(data)
+        logger.info("Starting Telegram bot (settings save)...")
+        tg_bot.launch_bot(
+            tg_cfg.token, load_data, generate_vpn_link, save_data,
+            self_service_svc=self_service_connections,
+            exit_node_server=exit_server, ssh_factory=get_ssh,
+        )
 
     return {"status": "success", "bot_running": tg_bot.is_running(), "warnings": warnings}
 
@@ -7975,7 +8009,15 @@ async def api_telegram_toggle(request: Request):
         save_data(data)
         return {'status': 'stopped', 'bot_running': False}
     else:
-        tg_bot.launch_bot(token, load_data, generate_vpn_link, save_data, self_service_svc=self_service_connections)
+        exit_uid = (tg_cfg.get('exit_node_uid') or '').strip()
+        exit_server = _telegram_exit_node_server(data)
+        if exit_uid and not exit_server:
+            return JSONResponse({'error': 'Telegram exit node not found or not installed'}, status_code=400)
+        tg_bot.launch_bot(
+            token, load_data, generate_vpn_link, save_data,
+            self_service_svc=self_service_connections,
+            exit_node_server=exit_server, ssh_factory=get_ssh,
+        )
         tg_cfg['enabled'] = True
         data['settings']['telegram'] = tg_cfg
         save_data(data)
