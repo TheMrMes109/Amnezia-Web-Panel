@@ -299,7 +299,7 @@ class ExitLinkService:
                     dns_via_exit = False
                     warnings.append('exit_dns_disabled_no_dns')
 
-            awg = await self._awg(entry)
+            awg = await self._awg(entry, protocol)
             entry_pub = await asyncio.to_thread(awg.exit_prepare_keys, protocol)
             try:
                 mtu = int(await asyncio.to_thread(awg._get_mtu, protocol) or 0)
@@ -401,7 +401,7 @@ class ExitLinkService:
             if not link:
                 return {'status': 'success', 'warnings': [], 'unlinked': False}
             # Entry first: direct egress must come back even when the exit is dead.
-            awg = await self._awg(entry)
+            awg = await self._awg(entry, protocol)
             await asyncio.to_thread(awg.exit_unlink, protocol)
             try:
                 exit_srv, _ = self._exit(data, link.get('exit_uid'))
@@ -476,7 +476,7 @@ class ExitLinkService:
         # The panel knows of no link, so a link file coming out of the archive
         # would silently route clients through an exit nobody is tracking.
         try:
-            awg = await self._awg(entry)
+            awg = await self._awg(entry, protocol)
             info = await asyncio.to_thread(awg.exit_link_info, protocol)
         except Exception as err:
             logger.warning("could not read the link state after restore: %s", err)
@@ -505,7 +505,7 @@ class ExitLinkService:
                     # to the current link, not to the exit being removed.
                     continue
                 try:
-                    awg = await self._awg(entry)
+                    awg = await self._awg(entry, protocol)
                     await asyncio.to_thread(awg.exit_unlink, protocol)
                     def remove_current(record):
                         if record.get('exit_link') != link:
@@ -579,7 +579,7 @@ class ExitLinkService:
                 current_link = rec.get('exit_link') or {}
                 if current_link.get('exit_uid') != current_uid:
                     continue
-                awg = await self._awg(entry)
+                awg = await self._awg(entry, protocol)
                 status = await asyncio.to_thread(awg.exit_link_status, protocol)
             except Exception as err:
                 logger.debug("exit failover health check skipped for %s/%s: %s", entry_uid, protocol, err)
@@ -628,7 +628,7 @@ class ExitLinkService:
         link = rec.get('exit_link')
         if not link:
             raise ExitLinkError('not_linked', 'This instance is not linked to an exit node')
-        awg = await self._awg(entry)
+        awg = await self._awg(entry, protocol)
         try:
             probe = await asyncio.to_thread(awg.exit_check_egress, protocol)
         except RuntimeError as err:
@@ -657,7 +657,7 @@ class ExitLinkService:
     async def status(self, entry_server_id, protocol):
         data = self.load_data()
         entry, rec = self._entry(data, entry_server_id, protocol)
-        awg = await self._awg(entry)
+        awg = await self._awg(entry, protocol)
         link_status = await asyncio.to_thread(awg.exit_link_status, protocol)
         try:
             mtu = int(await asyncio.to_thread(awg._get_mtu, protocol) or 0)
