@@ -876,5 +876,15 @@
   "full_backup_error": "无法下载备份。请检查管理员权限和存储。",
   "telegram_exit_node_label": "Telegram 机器人出口节点",
   "telegram_exit_direct": "直接连接（不使用出口节点）",
-  "telegram_exit_node_hint": "Telegram Bot API 请求将通过 SSH 隧道发送到所选出口服务器。该服务器必须允许 SSH TCP 转发。隧道失败时，机器人不会回退到直连。"
+  "telegram_exit_node_hint": "Telegram Bot API 请求将通过 SSH 隧道发送到所选出口服务器。该服务器必须允许 SSH TCP 转发。隧道失败时，机器人不会回退到直连。",
+  "warp_egress_title": "WireGuard / AmneziaWG 的 Cloudflare WARP",
+  "warp_egress_disabled": "未启用",
+  "warp_egress_enabled": "已启用",
+  "warp_egress_hint": "在安装了 WireGuard 或 AmneziaWG 的每台服务器上部署独立的 WARP 网关。VPN 客户端的互联网流量通过 WARP；VPN 入站端口和 SSH 管理仍使用原有路由。之后新安装的 WG/AWG 会自动继承此设置。",
+  "warp_egress_active_hint": "已为已安装的 WG/AWG 实例启用 WARP 出口。网关不可用时会阻断客户端流量，而不会回退到服务器直连。",
+  "warp_egress_counts": "已安装 {} 个 WG/AWG 实例，分布在 {} 台服务器上。",
+  "warp_egress_enable": "为所有 WG/AWG 启用",
+  "warp_egress_disable": "为所有 WG/AWG 禁用",
+  "warp_egress_enabled_toast": "已为 WG/AWG 启用 Cloudflare WARP 出口。",
+  "warp_egress_disabled_toast": "已为 WG/AWG 禁用 Cloudflare WARP 出口。"
 }
