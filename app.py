@@ -1758,6 +1758,11 @@ def _exit_manager_factory(ssh):
     return ExitManager(ssh)
 
 
+def _wireguard_exit_manager_factory(ssh):
+    from managers.plain_wireguard_exit_manager import PlainWireGuardExitManager
+    return PlainWireGuardExitManager(ssh)
+
+
 exit_link_svc = ExitLinkService(
     load_data=load_data,
     save_data=save_data,
@@ -1766,6 +1771,7 @@ exit_link_svc = ExitLinkService(
     awg_manager_factory=lambda ssh: AWGManager(ssh),
     wireguard_manager_factory=lambda ssh: WireGuardExitManager(ssh),
     exit_manager_factory=_exit_manager_factory,
+    wireguard_exit_manager_factory=_wireguard_exit_manager_factory,
     protocol_base=protocol_base,
     awg_protocols=AWG_PROTOCOLS,
     protocol_display_name=protocol_display_name,
