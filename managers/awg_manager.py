@@ -1803,7 +1803,7 @@ fi
             'WARP_IF=$(ip -o -4 addr show | awk \'$4 ~ /^172.29.173\\./ {print $2; exit}\')\n'
             'if [ -n "$WARP_IF" ]; then\n'
             '  ip -4 route replace 172.29.173.0/24 dev "$WARP_IF" table 51820\n'
-            '  DNS_IF=$(ip -o -4 addr show | awk \'$4 ~ /^172.29.172\\./ {print $2; exit}\')\n'
+            '  DNS_IF=$(ip -o -4 addr show | awk \'$4 ~ /^172.29.172\\./ {{print $2; exit}}\')\n'
             '  if [ -n "$DNS_IF" ]; then ip -4 route replace 172.29.172.0/24 dev "$DNS_IF" table 51820; fi\n'
             '  ip -4 route replace default via 172.29.173.2 dev "$WARP_IF" table 51820\n'
             '  iptables -t nat -C POSTROUTING -s "$SUBNET" -o "$WARP_IF" -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s "$SUBNET" -o "$WARP_IF" -j MASQUERADE\n'
