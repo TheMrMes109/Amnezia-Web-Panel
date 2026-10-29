@@ -537,7 +537,7 @@ class ExitLinkService:
                     continue
                 try:
                     exit_srv, _ = self._exit(data, link['exit_uid'])
-                    exit_manager = await self._exit_manager(exit_srv)
+                    exit_manager = await self._exit_manager(exit_srv, proto)
                     await asyncio.to_thread(exit_manager.remove_peer, None,
                                             peer_id_for(entry_uid, proto))
                     results.append({'protocol': proto, 'exit_uid': link['exit_uid'], 'status': 'success'})
