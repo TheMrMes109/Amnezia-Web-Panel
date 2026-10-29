@@ -550,6 +550,13 @@ class ExitLinkService:
         for entry_uid, protocol, current_uid, priority, dns_via_exit in candidates:
             if current_uid not in priority:
                 continue
+            # Old records may retain the original primary before the currently
+            # active node. From now on only the active node and nodes after it
+            # are valid failover targets; never put an already-failed node back
+            # into the backup list or make it look like the active primary.
+            active_priority = priority[priority.index(current_uid):]
+            if len(active_priority) < 2:
+                continue
             try:
                 fresh = self.load_data()
                 index, entry = self.find_server_by_uid(fresh, entry_uid)
@@ -566,8 +573,7 @@ class ExitLinkService:
                 continue
             if status and status.get('up'):
                 continue
-            start = priority.index(current_uid) + 1
-            for backup_uid in priority[start:]:
+            for backup_index_in_priority, backup_uid in enumerate(active_priority[1:], start=1):
                 try:
                     fresh = self.load_data()
                     backup_index, backup = self.find_server_by_uid(fresh, backup_uid)
@@ -576,9 +582,10 @@ class ExitLinkService:
                     entry_index, _ = self.find_server_by_uid(fresh, entry_uid)
                     if entry_index is None:
                         break
+                    next_priority = active_priority[backup_index_in_priority:]
                     logger.warning("Exit %s unhealthy for %s/%s; trying backup %s", current_uid, entry_uid, protocol, backup_uid)
                     await self.link(entry_index, protocol, backup_uid, force=False,
-                                    dns_via_exit=dns_via_exit, priority_uids=priority)
+                                    dns_via_exit=dns_via_exit, priority_uids=next_priority)
                     logger.warning("Exit failover completed for %s/%s: %s -> %s", entry_uid, protocol, current_uid, backup_uid)
                     break
                 except Exception as err:
