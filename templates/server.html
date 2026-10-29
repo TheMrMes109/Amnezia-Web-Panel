@@ -1233,6 +1233,11 @@
             <select class="form-input" id="exitLinkSelect"></select>
             <div class="form-hint" id="exitLinkSelectHint"></div>
         </div>
+        <div class="form-group">
+            <label class="form-label">{{ _('exit_link_fallbacks') }}</label>
+            <select class="form-input" id="exitLinkFallbackSelect" multiple size="4"></select>
+            <div class="form-hint">{{ _('exit_link_fallbacks_hint') }}</div>
+        </div>
         <div class="form-group hidden" id="exitDnsGroup">
             <label class="form-label" style="display:flex; align-items:center; gap:var(--space-sm);">
                 <input type="checkbox" id="exitDnsViaExit" onchange="saveExitDns(this.checked)"> {{ _('exit_dns_via_exit') }}
@@ -3681,8 +3686,10 @@
         currentExitLinkProto = proto;
         document.getElementById('exitLinkTitle').textContent = `${_('exit_link_title')} — ${getProtoTitle(proto)}`;
         const select = document.getElementById('exitLinkSelect');
+        const fallbackSelect = document.getElementById('exitLinkFallbackSelect');
         const hint = document.getElementById('exitLinkSelectHint');
         select.innerHTML = '';
+        fallbackSelect.innerHTML = '';
         hint.textContent = '';
         document.getElementById('exitLinkState').innerHTML = `<div class="form-hint">${_('loading')}</div>`;
         document.getElementById('exitLinkWarnings').innerHTML = '';
@@ -3704,13 +3711,20 @@
                 hint.textContent = _('exit_no_exit_nodes');
             }
             const legacy = protoBase(proto) === 'awg_legacy';
+            const savedPriority = (state.exit_link && state.exit_link.priority_uids) ||
+                (state.exit_link ? [state.exit_link.exit_uid] : []);
             candidates.forEach(n => {
-                const opt = document.createElement('option');
-                opt.value = n.uid;
-                opt.textContent = `${n.name} (${n.host}:${n.port || '?'})${n.obfuscation ? ' [AWG]' : ''}`;
-                if (legacy && n.obfuscation) { opt.disabled = true; opt.title = _('exit_legacy_obfuscation'); }
-                if (state.exit_link && state.exit_link.exit_uid === n.uid) opt.selected = true;
-                select.appendChild(opt);
+                const label = `${n.name} (${n.host}:${n.port || '?'})${n.obfuscation ? ' [AWG]' : ''}`;
+                const primary = document.createElement('option');
+                primary.value = n.uid; primary.textContent = label;
+                if (legacy && n.obfuscation) { primary.disabled = true; primary.title = _('exit_legacy_obfuscation'); }
+                if ((savedPriority[0] || (state.exit_link && state.exit_link.exit_uid)) === n.uid) primary.selected = true;
+                select.appendChild(primary);
+                const backup = document.createElement('option');
+                backup.value = n.uid; backup.textContent = label;
+                if (legacy && n.obfuscation) { backup.disabled = true; backup.title = _('exit_legacy_obfuscation'); }
+                if (savedPriority.slice(1).includes(n.uid)) backup.selected = true;
+                fallbackSelect.appendChild(backup);
             });
             document.getElementById('exitLinkBtn').disabled = !candidates.length;
             renderExitLinkState(state);
@@ -3749,8 +3763,10 @@
     async function saveExitLink(force = false) {
         const uid = document.getElementById('exitLinkSelect').value;
         if (!uid) return;
+        const fallback_uids = Array.from(document.getElementById('exitLinkFallbackSelect').selectedOptions)
+            .map(option => option.value).filter(value => value !== uid);
         if (currentExitLinkState && currentExitLinkState.ipv6 && !confirm(_('exit_link_ipv6_confirm'))) return;
-        await exitLinkRequest('', { protocol: currentExitLinkProto, exit_uid: uid, force }, 'exit_link_saved');
+        await exitLinkRequest('', { protocol: currentExitLinkProto, exit_uid: uid, fallback_uids, force }, 'exit_link_saved');
     }
 
     async function removeExitLink() {
