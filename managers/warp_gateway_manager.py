@@ -76,7 +76,7 @@ class WarpGatewayManager:
                 )
                 import re
                 if status_code != 0 or not re.search(
-                    r"(^|\\s)Connected($|\\s)", status, re.IGNORECASE
+                    r"(^|\s)Connected($|\s)", status, re.IGNORECASE
                 ):
                     self._run(f"docker restart {WARP_CONTAINER}", timeout=60)
             else:
