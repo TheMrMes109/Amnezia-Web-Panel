@@ -45,7 +45,8 @@ class ExitLinkService:
     def __init__(self, *, load_data, save_data, data_lock, get_ssh,
                  awg_manager_factory, exit_manager_factory,
                  protocol_base, awg_protocols, protocol_display_name,
-                 find_server_by_uid, wireguard_manager_factory=None, sleep=None):
+                 find_server_by_uid, wireguard_manager_factory=None,
+                 wireguard_exit_manager_factory=None, sleep=None):
         self.load_data = load_data
         self.save_data = save_data
         self.data_lock = data_lock
@@ -53,6 +54,7 @@ class ExitLinkService:
         self.awg_manager_factory = awg_manager_factory
         self.wireguard_manager_factory = wireguard_manager_factory
         self.exit_manager_factory = exit_manager_factory
+        self.wireguard_exit_manager_factory = wireguard_exit_manager_factory
         self.protocol_base = protocol_base
         self.awg_protocols = awg_protocols
         self.protocol_display_name = protocol_display_name
@@ -137,8 +139,12 @@ class ExitLinkService:
             return self.wireguard_manager_factory(ssh)
         return self.awg_manager_factory(ssh)
 
-    async def _exit_manager(self, server):
-        return self.exit_manager_factory(await asyncio.to_thread(self.get_ssh, server))
+    async def _exit_manager(self, server, protocol=None):
+        factory = self.exit_manager_factory
+        if (protocol and self.protocol_base(protocol) == 'wireguard'
+                and self.wireguard_exit_manager_factory):
+            factory = self.wireguard_exit_manager_factory
+        return factory(await asyncio.to_thread(self.get_ssh, server))
 
     # ----- persistence under the lock, resolved by uid (indices may shift) -----
 
@@ -247,9 +253,6 @@ class ExitLinkService:
             exit_srv, exit_rec = self._exit(data, exit_uid)
             if exit_srv.get('uid') == entry['uid']:
                 raise ExitLinkError('exit_self', 'A server cannot be its own exit node')
-            if self.protocol_base(protocol) == 'wireguard' and exit_rec.get('obfuscation'):
-                raise ExitLinkError('exit_wireguard_obfuscation',
-                                    'Standard WireGuard can only link to a non-obfuscated exit node')
             if self.protocol_base(protocol) == 'awg_legacy' and exit_rec.get('obfuscation'):
                 raise ExitLinkError('exit_legacy_obfuscation',
                                     'AmneziaWG Legacy can only link to a non-obfuscated exit node')
@@ -277,9 +280,6 @@ class ExitLinkService:
                     raise
                 if backup_srv.get('uid') == entry['uid']:
                     raise ExitLinkError('exit_self', 'A server cannot be its own exit node')
-                if self.protocol_base(protocol) == 'wireguard' and backup_rec.get('obfuscation'):
-                    raise ExitLinkError('exit_wireguard_obfuscation',
-                                        'Standard WireGuard can only use non-obfuscated exit nodes')
                 if self.protocol_base(protocol) == 'awg_legacy' and backup_rec.get('obfuscation'):
                     raise ExitLinkError('exit_legacy_obfuscation',
                                         'AmneziaWG Legacy can only link to a non-obfuscated exit node')
@@ -325,7 +325,7 @@ class ExitLinkService:
                     await self._update_record(entry['uid'], protocol,
                                               lambda r: (r.get('exit_link') or {}).__setitem__('stale', reason))
 
-            exit_manager = await self._exit_manager(exit_srv)
+            exit_manager = await self._exit_manager(exit_srv, protocol)
             name = f"{entry.get('name') or entry.get('host', '')} / {self.protocol_display_name(protocol)}"
             peer = await asyncio.to_thread(exit_manager.add_peer, peer_id, name, entry_pub)
             link = {
@@ -361,7 +361,7 @@ class ExitLinkService:
                 # New link confirmed: drop our peer on the previous exit, best effort.
                 try:
                     old_exit, _ = self._exit(data, previous['exit_uid'])
-                    old_exit_manager = await self._exit_manager(old_exit)
+                    old_exit_manager = await self._exit_manager(old_exit, protocol)
                     await asyncio.to_thread(old_exit_manager.remove_peer, None, peer_id)
                 except Exception as err:
                     logger.warning("previous exit %s unreachable, peer left behind: %s", previous['exit_uid'], err)
