@@ -252,8 +252,10 @@ class ExitLinkService:
             else:
                 priority = list(previous.get('priority_uids') or [exit_uid])
             priority = list(dict.fromkeys(str(uid).strip() for uid in priority if str(uid).strip()))
-            if not priority or priority[0] != exit_uid:
-                priority = [exit_uid] + [uid for uid in priority if uid != exit_uid]
+            if not priority:
+                priority = [exit_uid]
+            elif exit_uid not in priority:
+                priority = [exit_uid] + priority
             for backup_uid in priority[1:]:
                 backup_srv, backup_rec = self._exit(data, backup_uid)
                 if backup_srv.get('uid') == entry['uid']:
