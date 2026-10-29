@@ -39,6 +39,7 @@ class WireGuardWarpEgressTests(unittest.TestCase):
         self.assertIn("ip -4 rule add priority 210 from 10.8.2.0/24 table 51820", script)
         self.assertIn("default via 172.29.173.2", script)
         self.assertIn("iptables -t nat -A POSTROUTING -s 10.8.2.0/24 -o \"$WARP_IF\" -j MASQUERADE", script)
+        self.assertIn("ip -6 rule add priority 210 iif wg0 prohibit", script)
         self.assertEqual(ssh.commands[-1], "docker restart amnezia-wireguard")
 
     def test_awg_start_script_has_optional_warp_route(self):
