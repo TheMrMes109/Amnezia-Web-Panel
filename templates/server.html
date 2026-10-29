@@ -1685,6 +1685,7 @@
     let rknBlockStatus = null;
 
     const AWG_PROTOCOLS = ['awg', 'awg2', 'awg3', 'awg_legacy'];
+    const EXIT_LINK_PROTOCOLS = [...AWG_PROTOCOLS, 'wireguard'];
     // Protocols that hand out a client config or link, and therefore have an
     // address a client dials.
     const ENDPOINT_PROTOCOLS = [...AWG_PROTOCOLS, 'wireguard', 'xray', 'telemt'];
@@ -2507,7 +2508,7 @@
                     const awgBtn = AWG_PROTOCOLS.includes(protoBase(proto))
                         ? `<button class="btn btn-secondary btn-sm" onclick="openAwgSettings('${proto}')" title="${_('awg_settings_title')}">${_('awg_settings_btn')}</button>`
                         : '';
-                    const exitBtn = AWG_PROTOCOLS.includes(protoBase(proto))
+                    const exitBtn = EXIT_LINK_PROTOCOLS.includes(protoBase(proto))
                         ? `<button class="btn btn-secondary btn-sm" onclick="openExitLinkModal('${proto}')" title="${_('exit_link_title')}">🚪${info.exit_link ? ' ' + escapeHtml(info.exit_link.exit_name || '') : ''}</button>`
                         : '';
                     const ep = PUBLIC_ENDPOINTS[proto];
@@ -3580,7 +3581,12 @@
     let exitFallbackOrder = [];
     let exitNodeCandidates = [];
     let exitUnavailableFallbackUids = [];
-    let exitLegacyMode = false;
+    let exitNoObfuscation = false;
+    function exitObfuscationHint() {
+        return protoBase(currentExitLinkProto) === 'wireguard'
+            ? 'Standard WireGuard requires a non-obfuscated exit node.'
+            : _('exit_legacy_obfuscation');
+    }
     const EXIT_LINK_ERROR_KEYS = ['exit_no_handshake', 'exit_mtu_too_big', 'exit_self', 'exit_legacy_obfuscation',
         'exit_not_found', 'exit_apply_failed', 'exit_in_use', 'exit_egress_failed', 'exit_dns_needs_dns',
         'not_linked'];
@@ -3655,7 +3661,7 @@
         const srGroup = document.getElementById('smartRouteGroup');
         const srToggle = document.getElementById('smartRouteToggle');
         const srHint = document.getElementById('smartRouteHint');
-        srGroup.classList.toggle('hidden', !link);
+        srGroup.classList.toggle('hidden', !link || !AWG_PROTOCOLS.includes(protoBase(currentExitLinkProto)));
         if (link) {
             const srInstalled = !!(smartRouteStatus && smartRouteStatus.installed);
             const srGloballyOn = srInstalled && smartRouteStatus.enabled !== false;
@@ -3714,7 +3720,7 @@
             if (!candidates.length) {
                 hint.textContent = _('exit_no_exit_nodes');
             }
-            exitLegacyMode = protoBase(proto) === 'awg_legacy';
+            exitNoObfuscation = ['awg_legacy', 'wireguard'].includes(protoBase(proto));
             exitNodeCandidates = candidates;
             const activeUid = state.exit_link && state.exit_link.exit_uid;
             const savedPriority = (state.exit_link && state.exit_link.priority_uids) ||
@@ -3731,7 +3737,7 @@
                 const label = `${n.name} (${n.host}:${n.port || '?'})${n.obfuscation ? ' [AWG]' : ''}`;
                 const primary = document.createElement('option');
                 primary.value = n.uid; primary.textContent = label;
-                if (exitLegacyMode && n.obfuscation) { primary.disabled = true; primary.title = _('exit_legacy_obfuscation'); }
+                if (exitNoObfuscation && n.obfuscation) { primary.disabled = true; primary.title = exitObfuscationHint(); }
                 if (activeUid === n.uid) primary.selected = true;
                 select.appendChild(primary);
             });
@@ -3785,9 +3791,9 @@
             const option = document.createElement('option');
             option.value = n.uid;
             option.textContent = `${n.name} (${n.host}:${n.port || '?'})${n.obfuscation ? ' [AWG]' : ''}`;
-            if (exitLegacyMode && n.obfuscation) {
+            if (exitNoObfuscation && n.obfuscation) {
                 option.disabled = true;
-                option.title = _('exit_legacy_obfuscation');
+                option.title = exitObfuscationHint();
             }
             option.selected = selected.includes(n.uid);
             fallbackSelect.appendChild(option);
