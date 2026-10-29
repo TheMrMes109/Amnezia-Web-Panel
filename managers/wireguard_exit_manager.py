@@ -49,11 +49,7 @@ class WireGuardExitManager(AWGManager):
         return out
 
     def _write_start_script(self, protocol_type, config_path=None):
-        """Add persistent link hooks to the existing WireGuard start script.
-
-        Do not replace this script with AWGManager's generated script: it owns
-        WireGuard's firewall, NAT and bandwidth-limit setup.
-        """
+        """Keep exit-link hooks and optional WARP client routing in start.sh."""
         config_path = config_path or self.WG_CONFIG
         out, err, code = self.ssh.run_sudo_command(
             f"docker exec -i {self.WG_CONTAINER} cat /opt/amnezia/start.sh"
@@ -61,33 +57,53 @@ class WireGuardExitManager(AWGManager):
         if code != 0 or not out.strip():
             raise RuntimeError(f"Could not read WireGuard start script: {err or out}")
         script = out
-        marker = "# ---- Exit-node link (panel-managed; driven by"
-        if marker in script:
+        changed = False
+
+        exit_marker = "# ---- Exit-node link (panel-managed; driven by"
+        if exit_marker not in script:
+            start_marker = "# Start WireGuard"
+            if start_marker not in script:
+                raise RuntimeError("WireGuard start script layout is not recognized; refusing to overwrite it")
+            functions = self._exit_shell_functions(
+                config_path, "wg-quick",
+                f"{AWG_DEFAULTS['subnet_ip']}/{AWG_DEFAULTS['subnet_cidr']}"
+            )
+            script = script.replace(
+                start_marker,
+                functions
+                + '\n# Install the kill-switch before wg0 accepts client traffic.\n'
+                + '[ -f "$EXIT_CONF" ] && x_killswitch_on\n\n'
+                + start_marker,
+                1,
+            )
+            wg_up = f"if [ -f {config_path} ]; then wg-quick up {config_path}; fi"
+            if wg_up not in script:
+                raise RuntimeError("WireGuard start command not found; refusing to install partial exit hooks")
+            script = script.replace(wg_up, wg_up + '\n[ -f "$EXIT_CONF" ] && x_exit_sync', 1)
+            changed = True
+
+        warp_marker = "# ---- Optional Cloudflare WARP egress for VPN clients ----"
+        if warp_marker not in script:
+            subnet_ip = self._get_subnet_ip(protocol_type)
+            subnet_cidr = self._get_subnet_cidr(protocol_type)
+            warp_block = f'''
+{warp_marker}
+WARP_IF=$(ip -o -4 addr show | awk '$4 ~ /^172.29.173\\./ {{print $2; exit}}')
+if [ -n "$WARP_IF" ]; then
+    ip -4 route replace 172.29.173.0/24 dev "$WARP_IF" table 51820
+    ip -4 route replace default via 172.29.173.2 dev "$WARP_IF" table 51820
+    while ip -4 rule del priority 210 from {subnet_ip}/{subnet_cidr} table 51820 2>/dev/null; do :; done
+    ip -4 rule add priority 210 from {subnet_ip}/{subnet_cidr} table 51820
+fi
+'''
+            tail_marker = "tail -f /dev/null"
+            if tail_marker not in script:
+                raise RuntimeError("WireGuard start script tail marker not found; refusing to add WARP routing")
+            script = script.replace(tail_marker, warp_block + '\n' + tail_marker, 1)
+            changed = True
+
+        if not changed:
             return
-
-        start_marker = "# Start WireGuard"
-        if start_marker not in script:
-            raise RuntimeError("WireGuard start script layout is not recognized; refusing to overwrite it")
-
-        functions = self._exit_shell_functions(
-            config_path, "wg-quick", f"{AWG_DEFAULTS['subnet_ip']}/{AWG_DEFAULTS['subnet_cidr']}"
-        )
-        script = script.replace(
-            start_marker,
-            functions
-            + '\n# Install the kill-switch before wg0 accepts client traffic.\n'
-            + '[ -f "$EXIT_CONF" ] && x_killswitch_on\n\n'
-            + start_marker,
-            1,
-        )
-        wg_up = f"if [ -f {config_path} ]; then wg-quick up {config_path}; fi"
-        if wg_up not in script:
-            raise RuntimeError("WireGuard start command not found; refusing to install partial exit hooks")
-        script = script.replace(
-            wg_up,
-            wg_up + '\n[ -f "$EXIT_CONF" ] && x_exit_sync',
-            1,
-        )
         self.ssh.upload_file(script, "/tmp/_amnz_wg_start.sh")
         out, err, code = self.ssh.run_sudo_command(
             f"docker cp /tmp/_amnz_wg_start.sh {self.WG_CONTAINER}:/opt/amnezia/start.sh "
@@ -95,7 +111,7 @@ class WireGuardExitManager(AWGManager):
         )
         self.ssh.run_command("rm -f /tmp/_amnz_wg_start.sh")
         if code != 0:
-            raise RuntimeError(f"Could not install WireGuard exit hooks: {err or out}")
+            raise RuntimeError(f"Could not install WireGuard start hooks: {err or out}")
 
     def _get_subnet_ip(self, protocol_type):
         try:
