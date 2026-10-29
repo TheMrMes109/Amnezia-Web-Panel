@@ -30,6 +30,17 @@ class PlainWireGuardExitManager(ExitManager):
             extra_blocks=(self._mss_clamp_body(self.INTERFACE),),
         )
 
+    def add_peer(self, peer_id, name, public_key):
+        # Provision the compatible endpoint on demand; do not modify the
+        # existing obfuscated amnezia-exit container or its peers.
+        if not self.check_protocol_installed(self.PROTOCOL):
+            result = self.install_protocol()
+            if result.get("status") != "success":
+                raise RuntimeError(result.get("message", "Could not install plain WireGuard exit endpoint"))
+        if not self.check_container_running():
+            raise RuntimeError("Plain WireGuard exit endpoint is not running")
+        return super().add_peer(peer_id, name, public_key)
+
     def install_protocol(self, protocol_type="exit", port=None, subnet=None,
                          obfuscation=False, **kwargs):
         """Install a plain WG-compatible endpoint without touching the AWG one."""
