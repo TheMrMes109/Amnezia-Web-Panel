@@ -876,5 +876,15 @@
   "full_backup_error": "Backup could not be downloaded. Check administrator access and storage.",
   "telegram_exit_node_label": "Telegram bot exit node",
   "telegram_exit_direct": "Direct connection (no exit node)",
-  "telegram_exit_node_hint": "Telegram Bot API requests use an SSH tunnel to the selected exit server. SSH TCP forwarding must be allowed on that server. If the tunnel fails, the bot will not fall back to direct traffic."
+  "telegram_exit_node_hint": "Telegram Bot API requests use an SSH tunnel to the selected exit server. SSH TCP forwarding must be allowed on that server. If the tunnel fails, the bot will not fall back to direct traffic.",
+  "warp_egress_title": "Cloudflare WARP for WireGuard / AmneziaWG",
+  "warp_egress_disabled": "Not enabled",
+  "warp_egress_enabled": "Enabled",
+  "warp_egress_hint": "Deploy an isolated WARP gateway on every server with installed WireGuard or AmneziaWG. Client internet traffic is routed through WARP; VPN listen ports and SSH management keep their normal route. New WG/AWG installs inherit this setting.",
+  "warp_egress_active_hint": "WARP egress is enabled for installed WG/AWG instances. If a gateway is unavailable, client traffic fails closed rather than falling back to the server's direct route.",
+  "warp_egress_counts": "{} installed WG/AWG instances across {} servers.",
+  "warp_egress_enable": "Enable for all WG/AWG",
+  "warp_egress_disable": "Disable for all WG/AWG",
+  "warp_egress_enabled_toast": "Cloudflare WARP egress enabled for WG/AWG.",
+  "warp_egress_disabled_toast": "Cloudflare WARP egress disabled for WG/AWG."
 }
