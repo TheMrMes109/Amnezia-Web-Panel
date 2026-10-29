@@ -73,6 +73,13 @@
                     <input type="text" class="form-input" id="tg_token" value="{{ telegram_settings.token or '' }}"
                         placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
                 </div>
+                <div class="form-group">
+                    <label class="form-label" for="tg_exit_node">{{ _('telegram_exit_node_label') }}</label>
+                    <select class="form-input" id="tg_exit_node">
+                        <option value="">{{ _('telegram_exit_direct') }}</option>
+                    </select>
+                    <p class="form-hint">{{ _('telegram_exit_node_hint') }}</p>
+                </div>
                 <div class="row-between" style="margin-top: var(--space-md);">
                     <div style="display: flex; align-items: center; gap: var(--space-sm);">
                         <span style="font-size: 0.85rem; color: var(--text-muted);">{{ _('bot_status') }}:</span>
@@ -1041,7 +1048,8 @@
 
         const telegram = {
             token: document.getElementById('tg_token').value.trim(),
-            enabled: botCurrentlyRunning
+            enabled: botCurrentlyRunning,
+            exit_node_uid: document.getElementById('tg_exit_node').value || ''
         };
 
         const ssl = {
@@ -1399,19 +1407,31 @@
     }
 
     async function loadExitNodes() {
-        const select = document.getElementById('exitDefaultNode');
-        const current = {{ (settings.exit_nodes.default_exit_uid if settings.exit_nodes else '') | tojson }};
+        const defaultSelect = document.getElementById('exitDefaultNode');
+        const telegramSelect = document.getElementById('tg_exit_node');
+        const currentDefault = {{ (settings.exit_nodes.default_exit_uid if settings.exit_nodes else '') | tojson }};
+        const currentTelegram = {{ (telegram_settings.exit_node_uid if telegram_settings else '') | tojson }};
         try {
-            const data = await (await fetch('/api/exit-nodes')).json();
+            const response = await fetch('/api/exit-nodes');
+            if (!response.ok) throw new Error('Could not load exit nodes');
+            const data = await response.json();
             (data.exit_nodes || []).forEach(node => {
-                const opt = document.createElement('option');
-                opt.value = node.uid;
-                opt.textContent = `${node.name} (${node.host}:${node.port || '?'})`;
-                if (node.uid === current) opt.selected = true;
-                select.appendChild(opt);
+                const label = `${node.name} (${node.host}:${node.port || '?'})`;
+                const defaultOption = document.createElement('option');
+                defaultOption.value = node.uid;
+                defaultOption.textContent = label;
+                if (node.uid === currentDefault) defaultOption.selected = true;
+                defaultSelect.appendChild(defaultOption);
+
+                const telegramOption = document.createElement('option');
+                telegramOption.value = node.uid;
+                telegramOption.textContent = label;
+                if (node.uid === currentTelegram) telegramOption.selected = true;
+                telegramSelect.appendChild(telegramOption);
             });
         } catch (err) {
-            select.disabled = true;
+            defaultSelect.disabled = true;
+            telegramSelect.disabled = true;
         }
     }
 
