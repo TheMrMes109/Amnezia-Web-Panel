@@ -124,9 +124,17 @@ class WarpGatewayManager:
         )
         if WARP_NETWORK not in out:
             raise RuntimeError(f"{container_name} is not attached to {WARP_NETWORK}")
+        self._run(
+            f"docker exec {container_name} sh -c 'touch /opt/amnezia/warp-egress.enabled'",
+            timeout=30,
+        )
         return True
 
     def detach_container(self, container_name):
+        self._run(
+            f"docker exec {container_name} sh -c 'rm -f /opt/amnezia/warp-egress.enabled' >/dev/null 2>&1 || true",
+            timeout=30,
+        )
         self._run(
             f"docker network disconnect {WARP_NETWORK} {container_name} >/dev/null 2>&1 || true",
             timeout=30,
