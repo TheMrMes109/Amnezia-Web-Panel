@@ -254,6 +254,13 @@ iptables -C FORWARD -j DOCKER-USER 2>/dev/null || iptables -A FORWARD -j DOCKER-
 
         # Connect to DNS network
         self.ssh.run_sudo_command(f"docker network connect amnezia-dns-net {self.CONTAINER_NAME}")
+        # When the panel-wide Cloudflare WARP egress feature is enabled, its
+        # isolated transit network exists. Attach before start.sh runs so
+        # client-subnet policy routing can be configured on container startup.
+        self.ssh.run_sudo_command(
+            f"docker network inspect amnezia-warp-net >/dev/null 2>&1 && "
+            f"docker network connect amnezia-warp-net {self.CONTAINER_NAME} >/dev/null 2>&1 || true"
+        )
 
         # Wait for container
         results.append("Waiting for container to start...")
@@ -360,6 +367,16 @@ iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 iptables -t nat -A POSTROUTING -s {subnet_ip}/{subnet_cidr} -o eth0 -j MASQUERADE
 iptables -t nat -A POSTROUTING -s {subnet_ip}/{subnet_cidr} -o eth1 -j MASQUERADE
+
+# Optional Cloudflare WARP egress: only packets originating from VPN clients
+# use the isolated gateway. The server's WireGuard endpoint/SSH keep main routing.
+WARP_IF=$(ip -o -4 addr show | awk '$4 ~ /^172.29.173\./ {{print $2; exit}}')
+if [ -n "$WARP_IF" ]; then
+    ip -4 route replace 172.29.173.0/24 dev "$WARP_IF" table 51820
+    ip -4 route replace default via 172.29.173.2 dev "$WARP_IF" table 51820
+    while ip -4 rule del priority 210 from {subnet_ip}/{subnet_cidr} table 51820 2>/dev/null; do :; done
+    ip -4 rule add priority 210 from {subnet_ip}/{subnet_cidr} table 51820
+fi
 
 # Re-apply per-peer bandwidth limits (flat file written by the panel)
 if [ -f {self.BWLIMITS_PATH} ]; then
