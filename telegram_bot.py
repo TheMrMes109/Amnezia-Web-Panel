@@ -16,6 +16,8 @@ from typing import Optional, Callable
 
 import httpx
 
+from telegram_egress import TelegramExitProxy
+
 from connection_service import (
     SELF_SERVICE_PROTOCOLS,
     protocol_base,
@@ -274,10 +276,10 @@ def is_running() -> bool:
     return _bot_task is not None and not _bot_task.done()
 
 
-def launch_bot(token: str, load_data_fn: Callable, generate_vpn_link_fn: Callable, save_data_fn: Optional[Callable] = None, self_service_svc=None):
+def launch_bot(token: str, load_data_fn: Callable, generate_vpn_link_fn: Callable, save_data_fn: Optional[Callable] = None, self_service_svc=None, exit_node_server=None, ssh_factory=None):
     global _bot_task
     _bot_task = asyncio.create_task(
-        _run_bot(token, load_data_fn, generate_vpn_link_fn, save_data_fn, self_service_svc),
+        _run_bot(token, load_data_fn, generate_vpn_link_fn, save_data_fn, self_service_svc, exit_node_server, ssh_factory),
         name="telegram_bot",
     )
     return _bot_task
@@ -1632,11 +1634,41 @@ async def _user_create_connection(api: TelegramAPI, chat_id: int, panel_user: di
 # ----------------------------------------------------------------------- #
 #  Main polling loop and dispatcher
 # ----------------------------------------------------------------------- #
-async def _run_bot(token: str, load_data_fn: Callable, generate_vpn_link_fn: Callable, save_data_fn: Optional[Callable] = None, self_service_svc=None):
+async def _run_bot(token: str, load_data_fn: Callable, generate_vpn_link_fn: Callable,
+                   save_data_fn: Optional[Callable] = None, self_service_svc=None,
+                   exit_node_server=None, ssh_factory=None):
+    """Run the bot directly or through the selected exit server's SSH egress."""
+    proxy = None
+    client_kwargs = {}
+    if exit_node_server:
+        if ssh_factory is None:
+            logger.error("Telegram bot has an exit node selected but no SSH connector is available; refusing direct fallback")
+            return
+        try:
+            ssh_manager = await asyncio.to_thread(ssh_factory, exit_node_server)
+            proxy = TelegramExitProxy(ssh_manager).start()
+            client_kwargs["proxies"] = proxy.url
+            logger.info("Telegram Bot API traffic is routed through selected exit node %s", exit_node_server.get("name") or exit_node_server.get("host"))
+        except Exception:
+            logger.exception("Could not establish Telegram exit-node proxy; refusing direct fallback")
+            if proxy:
+                proxy.close()
+            return
+    try:
+        await _run_bot_session(
+            token, load_data_fn, generate_vpn_link_fn, save_data_fn,
+            self_service_svc, client_kwargs,
+        )
+    finally:
+        if proxy:
+            proxy.close()
+
+
+async def _run_bot_session(token: str, load_data_fn: Callable, generate_vpn_link_fn: Callable, save_data_fn: Optional[Callable] = None, self_service_svc=None, client_kwargs=None):
     offset = 0
     logger.info("Telegram bot started (raw httpx polling).")
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(**(client_kwargs or {})) as client:
         api = TelegramAPI(token, client)
 
         me = await api.call("getMe")
