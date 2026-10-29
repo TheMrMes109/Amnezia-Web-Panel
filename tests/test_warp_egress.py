@@ -40,6 +40,7 @@ class WireGuardWarpEgressTests(unittest.TestCase):
         self.assertIn("default via 172.29.173.2", script)
         self.assertIn('iptables -t nat -A POSTROUTING -s "$WARP_SUBNET" -o "$WARP_IF" -j MASQUERADE', script)
         self.assertIn("ip -6 rule add priority 210 iif wg0 prohibit", script)
+        self.assertIn("elif [ -f /opt/amnezia/warp-egress.enabled ]; then", script)
         self.assertEqual(ssh.commands[-1], "docker restart amnezia-wireguard")
 
     def test_awg_start_script_has_optional_warp_route(self):
@@ -47,6 +48,7 @@ class WireGuardWarpEgressTests(unittest.TestCase):
         self.assertIn("# ---- Optional Cloudflare WARP egress for VPN clients ----", script)
         self.assertIn('ip -4 rule add priority 210 from "$SUBNET" table 51820', script)
         self.assertIn('iptables -t nat -A POSTROUTING -s "$SUBNET" -o "$WARP_IF" -j MASQUERADE', script)
+        self.assertIn("elif [ -f /opt/amnezia/warp-egress.enabled ]; then", script)
 
     def test_awg_ipv6_uses_warp_when_available_or_fails_closed(self):
         script = AWGManager(None)._render_start_script("awg")
