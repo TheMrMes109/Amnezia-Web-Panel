@@ -67,12 +67,25 @@ class WarpGatewayManager:
                 timeout=60,
             )
         else:
-            self._run(f"docker start {WARP_CONTAINER} >/dev/null 2>&1 || true", timeout=30)
+            state, _state_err, state_code = self.ssh.run_sudo_command(
+                f"docker inspect -f '{{{{.State.Running}}}}' {WARP_CONTAINER}", timeout=30
+            )
+            if state_code == 0 and state.strip().lower() == "true":
+                status, _status_err, status_code = self.ssh.run_sudo_command(
+                    f"docker exec {WARP_CONTAINER} warp-cli --accept-tos status 2>/dev/null", timeout=20
+                )
+                import re
+                if status_code != 0 or not re.search(
+                    r"(^|\\s)Connected($|\\s)", status, re.IGNORECASE
+                ):
+                    self._run(f"docker restart {WARP_CONTAINER}", timeout=60)
+            else:
+                self._run(f"docker start {WARP_CONTAINER}", timeout=30)
 
         wait_script = (
             f"for i in $(seq 1 {int(timeout)}); do "
             f"if docker exec {WARP_CONTAINER} warp-cli --accept-tos status 2>/dev/null "
-            f"| grep -qi connected && "
+            f"| grep -Eqi '(^|[[:space:]])Connected([[:space:]]|$)' && "
             f"docker exec {WARP_CONTAINER} ip link show CloudflareWARP >/dev/null 2>&1; "
             f"then exit 0; fi; sleep 1; done; "
             f"docker logs --tail 80 {WARP_CONTAINER} 2>&1; exit 1"
