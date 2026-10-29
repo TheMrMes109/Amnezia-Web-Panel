@@ -45,12 +45,13 @@ class ExitLinkService:
     def __init__(self, *, load_data, save_data, data_lock, get_ssh,
                  awg_manager_factory, exit_manager_factory,
                  protocol_base, awg_protocols, protocol_display_name,
-                 find_server_by_uid, sleep=None):
+                 find_server_by_uid, wireguard_manager_factory=None, sleep=None):
         self.load_data = load_data
         self.save_data = save_data
         self.data_lock = data_lock
         self.get_ssh = get_ssh
         self.awg_manager_factory = awg_manager_factory
+        self.wireguard_manager_factory = wireguard_manager_factory
         self.exit_manager_factory = exit_manager_factory
         self.protocol_base = protocol_base
         self.awg_protocols = awg_protocols
@@ -104,8 +105,8 @@ class ExitLinkService:
         if not isinstance(server_id, int) or server_id < 0 or server_id >= len(servers):
             raise ExitLinkError('server_not_found', 'Server not found', 404)
         server = servers[server_id]
-        if self.protocol_base(protocol) not in self.awg_protocols:
-            raise ExitLinkError('protocol_not_awg', 'Only AmneziaWG instances can be linked to an exit node')
+        if self.protocol_base(protocol) not in self.awg_protocols and self.protocol_base(protocol) != 'wireguard':
+            raise ExitLinkError('protocol_not_supported', 'Only AmneziaWG and standard WireGuard instances can be linked to an exit node')
         rec = (server.get('protocols') or {}).get(protocol)
         if not rec or not rec.get('installed'):
             raise ExitLinkError('protocol_not_installed', f'{protocol} is not installed on this server')
@@ -126,10 +127,15 @@ class ExitLinkService:
             raise ExitLinkError('server_not_found', 'Entry server no longer exists', 404)
         return self._entry(data, index, protocol)
 
-    async def _awg(self, server):
+    async def _awg(self, server, protocol=None):
         # get_ssh() blocks on ensure_connected (TCP+SSH handshake, up to the
         # connect timeout) — never run it inside the event loop.
-        return self.awg_manager_factory(await asyncio.to_thread(self.get_ssh, server))
+        ssh = await asyncio.to_thread(self.get_ssh, server)
+        if protocol and self.protocol_base(protocol) == 'wireguard':
+            if not self.wireguard_manager_factory:
+                raise ExitLinkError('protocol_not_supported', 'Standard WireGuard exit routing is not configured')
+            return self.wireguard_manager_factory(ssh)
+        return self.awg_manager_factory(ssh)
 
     async def _exit_manager(self, server):
         return self.exit_manager_factory(await asyncio.to_thread(self.get_ssh, server))
@@ -202,7 +208,7 @@ class ExitLinkService:
             exit_srv, _ = self._exit(data, link.get('exit_uid'))
             self._require_exit_dns(exit_srv)
         async with self._locks[(entry['uid'], protocol)]:
-            awg = await self._awg(entry)
+            awg = await self._awg(entry, protocol)
             try:
                 log = await asyncio.to_thread(awg.exit_set_dns_via_exit, protocol, enabled)
             except Exception as err:
@@ -241,6 +247,9 @@ class ExitLinkService:
             exit_srv, exit_rec = self._exit(data, exit_uid)
             if exit_srv.get('uid') == entry['uid']:
                 raise ExitLinkError('exit_self', 'A server cannot be its own exit node')
+            if self.protocol_base(protocol) == 'wireguard' and exit_rec.get('obfuscation'):
+                raise ExitLinkError('exit_wireguard_obfuscation',
+                                    'Standard WireGuard can only link to a non-obfuscated exit node')
             if self.protocol_base(protocol) == 'awg_legacy' and exit_rec.get('obfuscation'):
                 raise ExitLinkError('exit_legacy_obfuscation',
                                     'AmneziaWG Legacy can only link to a non-obfuscated exit node')
@@ -268,6 +277,9 @@ class ExitLinkService:
                     raise
                 if backup_srv.get('uid') == entry['uid']:
                     raise ExitLinkError('exit_self', 'A server cannot be its own exit node')
+                if self.protocol_base(protocol) == 'wireguard' and backup_rec.get('obfuscation'):
+                    raise ExitLinkError('exit_wireguard_obfuscation',
+                                        'Standard WireGuard can only use non-obfuscated exit nodes')
                 if self.protocol_base(protocol) == 'awg_legacy' and backup_rec.get('obfuscation'):
                     raise ExitLinkError('exit_legacy_obfuscation',
                                         'AmneziaWG Legacy can only link to a non-obfuscated exit node')
@@ -442,7 +454,7 @@ class ExitLinkService:
             entries = await self.relink_entries_for_exit(uid) if uid else []
             return {'exit_entries_relinked': entries} if entries else {}
 
-        if base not in self.awg_protocols:
+        if base not in self.awg_protocols and base != 'wireguard':
             return {}
         try:
             entry, rec = self._entry(data, server_id, protocol)
