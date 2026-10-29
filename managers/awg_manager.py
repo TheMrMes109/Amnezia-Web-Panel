@@ -1817,6 +1817,9 @@ fi
             '      while ip -6 rule del priority 210 from "$SUBNET6" prohibit 2>/dev/null; do :; done\n'
             '      ip -6 rule add priority 210 from "$SUBNET6" prohibit\n'
             '    fi\n'
+            '  else\n'
+            '    while ip -6 rule del priority 210 iif "$IFACE" prohibit 2>/dev/null; do :; done\n'
+            '    ip -6 rule add priority 210 iif "$IFACE" prohibit\n'
             '  fi\n'
             'fi\n'
         )
