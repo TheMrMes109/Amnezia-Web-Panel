@@ -297,29 +297,9 @@
     </div>
 </div>
 
+
+
 {% if current_user and current_user.role == 'admin' %}
-<div class="card" id="serverWarpEgressCard" style="margin-top: var(--space-md);">
-    <div class="row-between" style="gap: var(--space-md); flex-wrap: wrap;">
-        <div>
-            <h3 class="card-title">Cloudflare WARP</h3>
-            <div class="form-hint" id="serverWarpEgressHint">{{ _('warp_egress_hint') }}</div>
-            <div class="form-hint" id="serverWarpEgressCount"></div>
-        </div>
-        <span class="badge badge-secondary" id="serverWarpEgressBadge">
-            {{ _('warp_egress_enabled') if server.get('warp_egress_enabled') else _('warp_egress_disabled') }}
-        </span>
-    </div>
-    <div class="flex gap-sm mt-md" style="flex-wrap: wrap;">
-        <button type="button" class="btn btn-primary" id="serverWarpEgressEnable"
-                onclick="setServerWarpEgress(true)" {% if server.get('warp_egress_enabled') %}hidden{% endif %}>
-            {{ _('warp_egress_enable') }}
-        </button>
-        <button type="button" class="btn btn-secondary" id="serverWarpEgressDisable"
-                onclick="setServerWarpEgress(false)" {% if not server.get('warp_egress_enabled') %}hidden{% endif %}>
-            {{ _('warp_egress_disable') }}
-        </button>
-    </div>
-</div>
 <script>
 const serverWarpEgressUrl = '/api/servers/{{ server_id }}/warp-egress/';
 const serverWarpEgressUid = {{ server.uid | tojson }};
@@ -561,6 +541,33 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
             </a>
         </div>
     </div>
+
+    {% if current_user and current_user.role == 'admin' %}
+    <!-- Cloudflare WARP Card: per-server egress setting in the service templates -->
+    <div class="card card-hover protocol-card protocol-warp installed-app-visible" id="serverWarpEgressCard">
+        <div class="protocol-card-head">
+            <div class="protocol-icon">🌐</div>
+            <div class="protocol-name">Cloudflare WARP</div>
+        </div>
+        <div class="protocol-desc" id="serverWarpEgressHint">{{ _('warp_egress_hint') }}</div>
+        <div class="protocol-status">
+            <span class="badge badge-secondary" id="serverWarpEgressBadge">
+                {{ _('warp_egress_enabled') if server.get('warp_egress_enabled') else _('warp_egress_disabled') }}
+            </span>
+        </div>
+        <div class="protocol-desc" id="serverWarpEgressCount"></div>
+        <div class="flex gap-sm" style="flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary btn-sm" id="serverWarpEgressEnable"
+                    onclick="setServerWarpEgress(true)" {% if server.get('warp_egress_enabled') %}hidden{% endif %}>
+                {{ _('warp_egress_enable') }}
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" id="serverWarpEgressDisable"
+                    onclick="setServerWarpEgress(false)" {% if not server.get('warp_egress_enabled') %}hidden{% endif %}>
+                {{ _('warp_egress_disable') }}
+            </button>
+        </div>
+    </div>
+    {% endif %}
 
     <!-- DNS Card -->
     <div class="card card-hover protocol-card protocol-dns" id="proto-dns">
