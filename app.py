@@ -3248,7 +3248,7 @@ def server_detail(request: Request, server_id: int):
     server = data['servers'][server_id]
     users_list = data.get('users', [])
     return tpl(request, 'server.html', server=server, server_id=server_id, users=users_list,
-               warp_egress_available=bool(_warp_egress_protocols(server)))
+               warp_egress_available=True)
 
 
 @app.get('/users', response_class=HTMLResponse, tags=["System Templates"])
@@ -7784,7 +7784,7 @@ async def _set_server_warp_egress(server, protocols, enabled):
     ssh = await asyncio.to_thread(get_ssh, server)
     gateway = WarpGatewayManager(ssh)
     try:
-        if enabled:
+        if enabled and protocols:
             await asyncio.to_thread(gateway.ensure_gateway)
         for proto, record in protocols:
             container = record.get('container_name') or protocol_container_name(proto)
@@ -7836,8 +7836,6 @@ async def api_server_warp_egress_set(request: Request, server_id: int, action: s
         return JSONResponse({'error': 'Server identity changed; refresh the inventory'}, status_code=409)
     protocols = _warp_egress_protocols(server)
     enabled = action == 'enable'
-    if enabled and not protocols:
-        return JSONResponse({'error': 'Install WireGuard or AmneziaWG on this server first'}, status_code=400)
     try:
         await _set_server_warp_egress(server, protocols, enabled)
         server['warp_egress_enabled'] = enabled
