@@ -94,6 +94,15 @@ tail -f /dev/null
 
 
 class WarpTemplateTests(unittest.TestCase):
+    def test_warp_controls_are_per_server_not_global(self):
+        root = Path(__file__).resolve().parents[1]
+        settings = (root / 'templates' / 'settings.html').read_text(encoding='utf-8')
+        server = (root / 'templates' / 'server.html').read_text(encoding='utf-8')
+        self.assertNotIn('warpEgressRow', settings)
+        self.assertNotIn('setWarpEgress(', settings)
+        self.assertIn('serverWarpEgressUrl', server)
+        self.assertIn('setServerWarpEgress(true)', server)
+
     @unittest.skipUnless(shutil.which("bash"), "bash is not installed")
     def test_gateway_entrypoint_parses_as_bash(self):
         template = Path(__file__).resolve().parents[1] / "protocol_templates" / "cloudflare-warp" / "entrypoint.sh"
