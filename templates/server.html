@@ -553,9 +553,9 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
         </div>
     </div>
 
-    {% if current_user and current_user.role == 'admin' %}
-    <!-- Cloudflare WARP Card: per-server egress setting in the service templates -->
-    <div class="card card-hover protocol-card protocol-warp{% if not server.get('warp_template_installed') %} installed-app-hidden{% else %} installed-app-visible{% endif %}" id="proto-warp">
+    {% if current_user and current_user.role == 'admin' and server.get('warp_template_installed') %}
+    <!-- Cloudflare WARP settings are rendered only after installing its service template. -->
+    <div class="card card-hover protocol-card protocol-warp installed-app-visible" id="proto-warp">
         <div class="protocol-card-head">
             <div class="protocol-icon">🌐</div>
             <div class="protocol-name">Cloudflare WARP</div>
