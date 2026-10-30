@@ -1812,6 +1812,7 @@ smartroute_svc = SmartRouteService(
     awg_manager_factory=lambda ssh: AWGManager(ssh),
     protocol_base=protocol_base,
     awg_protocols=AWG_PROTOCOLS,
+    wireguard_manager_factory=lambda ssh: WireGuardExitManager(ssh),
     apply_dns_via_exit=lambda sid, proto, en: exit_link_svc.set_dns_via_exit(sid, proto, en),
 )
 
