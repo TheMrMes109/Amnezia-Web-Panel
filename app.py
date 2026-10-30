@@ -339,6 +339,11 @@ def load_data():
         # Preserve the previous global choice as an individual preference per remote server.
         for configured_server in data.get('servers', []):
             configured_server.setdefault('warp_egress_enabled', True)
+            configured_server.setdefault('warp_template_installed', True)
+    for configured_server in data.get('servers', []):
+        # Existing per-server WARP setups already have the template configured.
+        if configured_server.get('warp_egress_enabled'):
+            configured_server.setdefault('warp_template_installed', True)
     settings.setdefault('telegram', {'token': '', 'enabled': False, 'exit_node_uid': ''})
     settings['telegram'].setdefault('exit_node_uid', '')
     mail = settings.setdefault('mail', dict(DEFAULT_MAIL_SETTINGS))
@@ -7816,8 +7821,26 @@ async def api_server_warp_egress_status(request: Request, server_id: int,
     if not server.get('uid') or (server_uid is not None and server.get('uid') != server_uid):
         return JSONResponse({'error': 'Server identity changed; refresh the inventory'}, status_code=409)
     protocols = _warp_egress_protocols(server)
-    return {'enabled': bool(server.get('warp_egress_enabled', False)),
+    return {'template_installed': bool(server.get('warp_template_installed', False)),
+            'enabled': bool(server.get('warp_egress_enabled', False)),
             'eligible_instances': len(protocols), 'available': bool(protocols)}
+
+
+@app.post('/api/servers/{server_id}/warp-egress/install', tags=["Servers"])
+async def api_server_warp_egress_install(request: Request, server_id: int,
+                                         server_uid: Optional[str] = None):
+    """Enable the WARP service template for this server; no traffic is changed yet."""
+    if not _check_admin(request):
+        return JSONResponse({'error': 'Forbidden'}, status_code=403)
+    data = load_data()
+    if not 0 <= server_id < len(data.get('servers', [])):
+        return JSONResponse({'error': 'Server not found'}, status_code=404)
+    server = data['servers'][server_id]
+    if not server.get('uid') or (server_uid is not None and server.get('uid') != server_uid):
+        return JSONResponse({'error': 'Server identity changed; refresh the inventory'}, status_code=409)
+    server['warp_template_installed'] = True
+    save_data(data)
+    return {'status': 'success', 'installed': True}
 
 
 @app.post('/api/servers/{server_id}/warp-egress/{action}', tags=["Servers"])
@@ -7834,6 +7857,8 @@ async def api_server_warp_egress_set(request: Request, server_id: int, action: s
     server = data['servers'][server_id]
     if not server.get('uid') or (server_uid is not None and server.get('uid') != server_uid):
         return JSONResponse({'error': 'Server identity changed; refresh the inventory'}, status_code=409)
+    if not server.get('warp_template_installed'):
+        return JSONResponse({'error': 'Install the Cloudflare WARP template for this server first'}, status_code=409)
     protocols = _warp_egress_protocols(server)
     enabled = action == 'enable'
     try:
