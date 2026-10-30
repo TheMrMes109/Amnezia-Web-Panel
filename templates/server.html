@@ -303,6 +303,17 @@
 <script>
 const serverWarpEgressUrl = '/api/servers/{{ server_id }}/warp-egress/';
 const serverWarpEgressUid = {{ server.uid | tojson }};
+async function installWarpTemplate() {
+    try {
+        await apiCall(serverWarpEgressUrl + 'install?server_uid=' + encodeURIComponent(serverWarpEgressUid), 'POST');
+        showToast(_('installed'), 'success');
+        // The page uses a server-rendered installation flag; refresh to expose
+        // the per-server WARP settings only after the template is installed.
+        window.location.reload();
+    } catch (error) {
+        showToast(_('error') + ': ' + error.message, 'error');
+    }
+}
 async function loadServerWarpEgress() {
     try {
         const status = await apiCall(serverWarpEgressUrl + 'status?server_uid=' + encodeURIComponent(serverWarpEgressUid));
@@ -544,7 +555,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
 
     {% if current_user and current_user.role == 'admin' %}
     <!-- Cloudflare WARP Card: per-server egress setting in the service templates -->
-    <div class="card card-hover protocol-card protocol-warp installed-app-visible" id="serverWarpEgressCard">
+    <div class="card card-hover protocol-card protocol-warp{% if not server.get('warp_template_installed') %} installed-app-hidden{% else %} installed-app-visible{% endif %}" id="proto-warp">
         <div class="protocol-card-head">
             <div class="protocol-icon">🌐</div>
             <div class="protocol-name">Cloudflare WARP</div>
@@ -1726,6 +1737,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
         { proto: 'exit', category: 'services', icon: '🚪', title: 'Exit Node', descKey: 'exit_desc', badge: 'NEW' },
         { proto: 'smartroute', category: 'services', icon: '🧭', title: 'Smart Route', descKey: 'smartroute_desc', badge: 'NEW' },
         { proto: 'rknblock', category: 'services', icon: '🌈', title: 'RKN Block (C24Be)', descKey: 'rknblock_desc' },
+        { proto: 'warp', category: 'services', icon: '🌐', title: 'Cloudflare WARP', descKey: 'warp_egress_hint' },
         { proto: 'nginx', category: 'web_servers', icon: '🌐', title: 'NGINX', descKey: 'nginx_desc' },
     ];
     const MARKETPLACE_CATEGORIES = [
@@ -1748,6 +1760,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
     let smartRouteStatus = null;
     // RKN Block app state (GET /api/servers/{id}/rkn_scans); null = not loaded.
     let rknBlockStatus = null;
+    const WARP_TEMPLATE_INSTALLED = {{ server.get('warp_template_installed', false) | tojson }};
 
     const AWG_PROTOCOLS = ['awg', 'awg2', 'awg3', 'awg_legacy'];
     const EXIT_LINK_PROTOCOLS = [...AWG_PROTOCOLS, 'wireguard'];
@@ -2001,16 +2014,19 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
                         ${apps.map(app => {
                             const isSmart = app.proto === 'smartroute';
                             const isRkn = app.proto === 'rknblock';
-                            const isHostApp = isSmart || isRkn;
+                            const isWarp = app.proto === 'warp';
+                            const isHostApp = isSmart || isRkn || isWarp;
                             const installed = isSmart ? !!(smartRouteStatus && smartRouteStatus.installed)
                                 : (isRkn ? !!(rknBlockStatus && rknBlockStatus.installed)
-                                    : baseInstalled(app.proto));
+                                    : (isWarp ? WARP_TEMPLATE_INSTALLED : baseInstalled(app.proto)));
                             const canInstallAnother = installed && isMultiInstanceBase(app.proto);
                             const action = isSmart
                                 ? `onclick="openSmartRouteModal()"`
                                 : (isRkn
                                     ? (installed ? 'disabled' : `onclick="closeModal('marketplaceModal'); installRknBlock()"`)
-                                    : (installed && !canInstallAnother ? 'disabled' : `onclick="installFromMarketplace('${app.proto}', ${canInstallAnother ? 'true' : 'false'})"`));
+                                    : (isWarp
+                                        ? (installed ? 'disabled' : `onclick="installWarpTemplate()"`)
+                                        : (installed && !canInstallAnother ? 'disabled' : `onclick="installFromMarketplace('${app.proto}', ${canInstallAnother ? 'true' : 'false'})"`)));
                             const statusBadge = isHostApp
                                 ? (installed
                                     ? `<span class="badge badge-success"><span class="badge-dot"></span> ${_('installed')}</span>`
@@ -2118,6 +2134,13 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
         }
         if (rknInstalled) installedCount++;
         renderRknBlockCard();
+
+        const warpCard = document.getElementById('proto-warp');
+        if (warpCard) {
+            warpCard.classList.toggle('installed-app-hidden', !WARP_TEMPLATE_INSTALLED);
+            warpCard.classList.toggle('installed-app-visible', WARP_TEMPLATE_INSTALLED);
+        }
+        if (WARP_TEMPLATE_INSTALLED) installedCount++;
 
         orderedProtocolEntries(currentProtocolStatus || {}).forEach(([proto, info]) => {
             if (protoInstance(proto) > 1) {
