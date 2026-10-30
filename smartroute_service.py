@@ -44,12 +44,16 @@ def split_instances(data, server_id):
 class SmartRouteService:
     def __init__(self, *, load_data, save_data, data_lock, get_ssh,
                  awg_manager_factory, protocol_base, awg_protocols,
-                 apply_dns_via_exit=None):
+                 wireguard_manager_factory=None, apply_dns_via_exit=None):
         self.load_data = load_data
         self.save_data = save_data
         self.data_lock = data_lock
         self.get_ssh = get_ssh
         self.awg_manager_factory = awg_manager_factory
+        # Standard WireGuard uses the same exit-routing hooks through its
+        # WireGuardExitManager adapter, but must not be treated as an AWG
+        # container/configuration.
+        self.wireguard_manager_factory = wireguard_manager_factory
         self.protocol_base = protocol_base
         self.awg_protocols = awg_protocols
         # set_dns_via_exit(server_id, protocol, enabled) -> result; wired to
@@ -106,7 +110,7 @@ class SmartRouteService:
         server = self._server(data, server_id)
         rec = (server.get('protocols') or {}).get(protocol) or {}
         link = rec.get('exit_link') or {}
-        awg = await self._awg(server)
+        awg = await self._awg(server, protocol)
         try:
             if enabled:
                 if 'smart_route_prev_dns' not in link:
@@ -131,16 +135,26 @@ class SmartRouteService:
 
     def _entry(self, data, server_id, protocol):
         server = self._server(data, server_id)
-        if self.protocol_base(protocol) not in self.awg_protocols:
-            raise SmartRouteError('protocol_not_awg', 'Only AmneziaWG instances support Smart Route')
+        base = self.protocol_base(protocol)
+        if base not in self.awg_protocols and base != 'wireguard':
+            raise SmartRouteError(
+                'protocol_not_awg',
+                'Only AmneziaWG and standard WireGuard instances support Smart Route')
         rec = (server.get('protocols') or {}).get(protocol) or {}
         link = rec.get('exit_link') or {}
         if not link.get('exit_uid'):
             raise SmartRouteError('not_linked', 'Link this instance to an exit node first')
         return server, rec, link
 
-    async def _awg(self, server):
-        return self.awg_manager_factory(await asyncio.to_thread(self.get_ssh, server))
+    async def _awg(self, server, protocol=None):
+        ssh = await asyncio.to_thread(self.get_ssh, server)
+        if protocol and self.protocol_base(protocol) == 'wireguard':
+            if self.wireguard_manager_factory is None:
+                raise SmartRouteError(
+                    'protocol_not_awg',
+                    'Standard WireGuard Smart Route adapter is not configured', 501)
+            return self.wireguard_manager_factory(ssh)
+        return self.awg_manager_factory(ssh)
 
     async def _smartr(self, server):
         return SmartRouteManager(await asyncio.to_thread(self.get_ssh, server))
@@ -199,7 +213,7 @@ class SmartRouteService:
         rollback_failed = []
         for proto, _link in splits:
             try:
-                awg = await self._awg(server)
+                awg = await self._awg(server, proto)
                 container, config_path, subnet_default = await self._container_ctx(awg, proto)
                 smartr = await self._smartr(server)
                 await asyncio.to_thread(smartr.disable_instance, container, config_path, subnet_default)
@@ -242,7 +256,7 @@ class SmartRouteService:
         # 4) Normalize the link state (conntrack flush via x_exit_sync).
         for proto, _ in splits:
             try:
-                awg = await self._awg(server)
+                awg = await self._awg(server, proto)
                 await asyncio.to_thread(awg._exit_apply, proto)
             except Exception as err:
                 logger.warning("exit re-sync after smartroute uninstall of %s failed: %s", proto, err)
@@ -285,11 +299,11 @@ class SmartRouteService:
         if bool(sm.get('enabled', True)) == enabled:
             return {'status': 'success', 'enabled': enabled, 'unchanged': True}
 
-        awg = await self._awg(server)
         smartr = await self._smartr(server)
         applied, failed = [], []
         for proto, _link in split_instances(data, server_id):
             try:
+                awg = await self._awg(server, proto)
                 container, config_path, subnet_default = await self._container_ctx(awg, proto)
                 if enabled:
                     await asyncio.to_thread(smartr.enable_instance, container, config_path, subnet_default)
@@ -347,7 +361,7 @@ class SmartRouteService:
         applied, failed = [], []
         for proto, _link in split_instances(self.load_data(), server_id):
             try:
-                awg = await self._awg(server)
+                awg = await self._awg(server, proto)
                 await asyncio.to_thread(awg.update_awg_settings, proto, dns=pair)
                 applied.append(proto)
             except Exception as err:
@@ -377,7 +391,7 @@ class SmartRouteService:
         # Refresh every split instance so the new subnets take effect now.
         for proto, _link in split_instances(self.load_data(), server_id):
             try:
-                awg = await self._awg(server)
+                awg = await self._awg(server, proto)
                 container, _, _ = await self._container_ctx(awg, proto)
                 await asyncio.to_thread(smartr.refresh_instance, container)
             except Exception as err:
@@ -401,7 +415,7 @@ class SmartRouteService:
             return {'status': 'success', 'smart_route': enabled, 'unchanged': True}
 
         async with self._locks[(server.get('uid', server_id), protocol)]:
-            awg = await self._awg(server)
+            awg = await self._awg(server, protocol)
             container, config_path, subnet_default = await self._container_ctx(awg, protocol)
             smartr = await self._smartr(server)
             if enabled:
@@ -454,7 +468,7 @@ class SmartRouteService:
         server, _rec, link = self._entry(data, server_id, protocol)
         if not link.get('smart_route'):
             return {'enabled': False}
-        awg = await self._awg(server)
+        awg = await self._awg(server, protocol)
         container, config_path, subnet_default = await self._container_ctx(awg, protocol)
         smartr = await self._smartr(server)
         out = await asyncio.to_thread(smartr.instance_counters, container, config_path, subnet_default)
