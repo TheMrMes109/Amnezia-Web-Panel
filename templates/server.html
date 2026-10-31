@@ -3201,6 +3201,11 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
             portInput.disabled = false;
             portHint.textContent = _('exit_port_hint');
             exitOpts.style.display = 'block';
+        } else if (base === 'wireguardto') {
+            portLabel.textContent = _('port') + ' (UDP)';
+            portInput.value = '51821';
+            portInput.disabled = false;
+            portHint.textContent = _('port_default_hint');
         } else {
             portLabel.textContent = _('port') + ' (UDP)';
             portInput.value = currentInstallAnother ? nextSuggestedPort(currentInstallProto, 55424) : '55424';
