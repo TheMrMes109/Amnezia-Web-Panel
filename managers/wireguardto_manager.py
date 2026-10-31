@@ -39,23 +39,36 @@ class WireGuardToManager(WireGuardManager):
         self._discover_awg()
 
     def _discover_awg(self):
+        """Find the AWG container that already owns the WireGuardTo config."""
         out, _, code = self.ssh.run_sudo_command("docker ps --format '{{.Names}}'")
-        if code == 0:
-            names = set((out or "").split())
-            for proto, name in AWG_CANDIDATES:
-                if name in names:
-                    self.awg_protocol, self.CONTAINER_NAME = proto, name
-                    return
+        if code != 0:
+            return
+        names = set((out or "").split())
+        for proto, name in AWG_CANDIDATES:
+            if name not in names:
+                continue
+            _, _, installed_code = self.ssh.run_sudo_command(
+                f"docker exec {shlex.quote(name)} test -s {WGTO_CONFIG}"
+            )
+            if installed_code == 0:
+                self.awg_protocol, self.CONTAINER_NAME = proto, name
+                return
+        for proto, name in AWG_CANDIDATES:
+            if name in names:
+                self.awg_protocol, self.CONTAINER_NAME = proto, name
+                return
 
-    def _select_awg_with_exit(self):
+    def _select_awg_with_exit(self, target_protocol=None):
         out, err, code = self.ssh.run_sudo_command("docker ps --format '{{.Names}}'")
         if code != 0:
             raise RuntimeError(err or "Cannot inspect running Docker containers")
         names = set((out or "").split())
+        candidates = [(p, n) for p, n in AWG_CANDIDATES
+                      if n in names and (not target_protocol or p == target_protocol)]
+        if not candidates:
+            raise RuntimeError(f"Selected AmneziaWG instance '{target_protocol}' is not running")
         linked = []
-        for proto, name in AWG_CANDIDATES:
-            if name not in names:
-                continue
+        for proto, name in candidates:
             _, _, check_code = self.ssh.run_sudo_command(
                 f"docker exec {shlex.quote(name)} sh -c "
                 + shlex.quote(f"test -s {EXIT_CONF} && ip link show exit0 >/dev/null 2>&1")
@@ -63,9 +76,13 @@ class WireGuardToManager(WireGuardManager):
             if check_code == 0:
                 linked.append((proto, name))
         if len(linked) != 1:
+            if target_protocol:
+                raise RuntimeError(
+                    f"Selected {target_protocol} has no active Exit Link. "
+                    "Connect this AmneziaWG instance to an Exit Node first."
+                )
             raise RuntimeError(
-                "WireGuardTo requires exactly one running AWG container with an active Exit Link. "
-                f"Found {len(linked)}. Connect the AWG instance to its Exit Node first."
+                "Select a specific AmneziaWG instance with an active Exit Link for WireGuardTo."
             )
         self.awg_protocol, self.CONTAINER_NAME = linked[0]
         return self.CONTAINER_NAME
@@ -228,11 +245,11 @@ WantedBy=timers.target
             if code != 0:
                 raise RuntimeError(err or out or f"Host UDP forwarder setup failed: {command}")
 
-    def install_protocol(self, port=None):
+    def install_protocol(self, port=None, awg_protocol=None):
         port = int(port or WGTO_PORT)
         if not 1 <= port <= 65535:
             raise RuntimeError("WireGuardTo UDP port must be between 1 and 65535")
-        self._select_awg_with_exit()
+        self._select_awg_with_exit(awg_protocol)
         if self.check_protocol_installed():
             raise RuntimeError("WireGuardTo is already installed")
         out, err, code = self.ssh.run_sudo_command(
@@ -271,6 +288,7 @@ Table = off
             "message": "WireGuardTo is listening and routed only through the AWG Exit Link.",
             "port": str(port),
             "container_name": self.CONTAINER_NAME,
+            "awg_protocol": self.awg_protocol,
             "public_key": public_key,
             "subnet": WGTO_SUBNET,
         }
