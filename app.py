@@ -1105,7 +1105,7 @@ async def wait_for_tunnel_url(provider: str, seconds: int = 20):
     return get_tunnel_status(provider)
 
 
-BASE_PROTOCOLS = ['awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'dns', 'wireguard', 'socks5', 'adguard', 'nginx', 'exit']
+BASE_PROTOCOLS = ['awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'dns', 'wireguard', 'wireguardto', 'socks5', 'adguard', 'nginx', 'exit']
 MULTI_INSTANCE_PROTOCOLS = {'awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'socks5'}
 
 
@@ -1193,6 +1193,7 @@ def protocol_display_name(protocol: str, header_protection=False) -> str:
         'telemt': 'Telemt',
         'dns': 'AmneziaDNS',
         'wireguard': 'WireGuard',
+        'wireguardto': 'WireGuardTo',
         'socks5': 'SOCKS5',
         'adguard': 'AdGuard Home',
         'nginx': 'NGINX',
@@ -1214,6 +1215,7 @@ def protocol_container_name(protocol: str) -> Optional[str]:
         'telemt': 'telemt',
         'dns': 'amnezia-dns',
         'wireguard': 'amnezia-wireguard',
+        'wireguardto': 'amnezia-awg',
         'socks5': 'amnezia-socks5proxy',
         'adguard': 'amnezia-adguard',
         'nginx': 'amnezia-nginx',
@@ -1243,6 +1245,9 @@ def get_protocol_manager(ssh, protocol: str):
     elif base == 'wireguard':
         from managers.wireguard_manager import WireGuardManager
         return WireGuardManager(ssh)
+    elif base == 'wireguardto':
+        from managers.wireguardto_manager import WireGuardToManager
+        return WireGuardToManager(ssh)
     elif base == 'socks5':
         from managers.socks5_manager import Socks5Manager
         return Socks5Manager(ssh, protocol)
@@ -4643,7 +4648,7 @@ def get_used_ports(ssh):
 # mapped to their transport. dns/adguard are skipped (internal bindings).
 INSTALL_PORT_TRANSPORT = {
     'awg': 'udp', 'awg2': 'udp', 'awg3': 'udp', 'awg_legacy': 'udp',
-    'wireguard': 'udp', 'exit': 'udp',
+    'wireguard': 'udp', 'wireguardto': 'udp', 'exit': 'udp',
     'xray': 'tcp', 'telemt': 'tcp', 'socks5': 'tcp', 'nginx': 'tcp',
 }
 
@@ -4702,6 +4707,11 @@ async def api_install_protocol(request: Request, server_id: int, req: InstallPro
         if install_base in EXIT_LINK_PROTOCOLS:
             previous_link = ((server.get('protocols') or {}).get(install_protocol) or {}).get('exit_link')
 
+        if install_base in AWG_PROTOCOLS and any(
+            protocol_base(p) == 'wireguardto' and (rec or {}).get('installed')
+            for p, rec in (server.get('protocols') or {}).items()
+        ):
+            return JSONResponse({'error': 'Uninstall WireGuardTo before reinstalling or replacing its AWG host. This protects its keys and routing state.'}, status_code=409)
         awg_special_junk = awg_special_junk_from(req) if install_base in AWG_PROTOCOLS else None
         if awg_special_junk is not None:
             # Reject a malformed packet before touching the server.
@@ -4716,12 +4726,13 @@ async def api_install_protocol(request: Request, server_id: int, req: InstallPro
         # Validate the requested port before touching Docker: a busy port
         # otherwise fails mid-install with a half-created broken container.
         transport = INSTALL_PORT_TRANSPORT.get(install_base)
-        if transport and req.port and str(req.port).isdigit():
+        port_to_validate = req.port or ('51821' if install_base == 'wireguardto' else None)
+        if transport and port_to_validate and str(port_to_validate).isdigit():
             used = await asyncio.to_thread(get_used_ports, ssh)
-            owner = used.get(transport, {}).get(str(req.port))
+            owner = used.get(transport, {}).get(str(port_to_validate))
             if owner:
                 return JSONResponse(
-                    {'error': f'Port {req.port}/{transport} is already used by {owner}. '
+                    {'error': f'Port {port_to_validate}/{transport} is already used by {owner}. '
                               f'Choose another port.'},
                     status_code=400)
 
@@ -4750,9 +4761,9 @@ async def api_install_protocol(request: Request, server_id: int, req: InstallPro
         elif install_base == 'xray':
             install_args = ()
             install_kwargs = dict(port=req.port)
-        elif install_base == 'wireguard':
+        elif install_base in ('wireguard', 'wireguardto'):
             install_args = ()
-            install_kwargs = dict(port=req.port)
+            install_kwargs = dict(port=req.port or ('51821' if install_base == 'wireguardto' else None))
         elif install_base == 'socks5':
             install_args = ()
             install_kwargs = dict(
@@ -4816,7 +4827,7 @@ async def api_install_protocol(request: Request, server_id: int, req: InstallPro
 
         proto_record = {
             'installed': True,
-            'port': req.port,
+            'port': result.get('port') or req.port,
             'awg_params': result.get('awg_params', {}),
         }
         if result.get('mtu'):
@@ -4841,7 +4852,7 @@ async def api_install_protocol(request: Request, server_id: int, req: InstallPro
         proto_record['base_protocol'] = install_base
         proto_record['instance'] = protocol_instance(install_protocol)
         proto_record['display_name'] = protocol_display_name(install_protocol)
-        proto_record['container_name'] = protocol_container_name(install_protocol)
+        proto_record['container_name'] = result.get('container_name') or protocol_container_name(install_protocol)
         if previous_link:
             proto_record['exit_link'] = previous_link
         proto_record.update(previous_public)
@@ -5384,6 +5395,12 @@ async def api_uninstall_protocol(request: Request, server_id: int, req: Protocol
             return guard
         server = data['servers'][server_id]
         base = protocol_base(req.protocol)
+        if base in AWG_PROTOCOLS and any(
+            protocol_base(p) == 'wireguardto' and (rec or {}).get('installed')
+            for p, rec in (server.get('protocols') or {}).items()
+        ):
+            return JSONResponse({'error': 'Uninstall WireGuardTo first; it shares this AWG container and Exit Link.'}, status_code=409)
+
         if base in EXIT_LINK_PROTOCOLS and ((server.get('protocols') or {}).get(req.protocol) or {}).get('exit_link'):
             # Drop our peer on the exit while the container still exists
             try:
@@ -5395,7 +5412,7 @@ async def api_uninstall_protocol(request: Request, server_id: int, req: Protocol
         ssh = await asyncio.to_thread(get_ssh, server)
         await asyncio.to_thread(ssh.connect)
         manager = get_protocol_manager(ssh, req.protocol)
-        if base in ('xray', 'wireguard'):
+        if base in ('xray', 'wireguard', 'wireguardto'):
             await asyncio.to_thread(manager.remove_container)
         else:
             await asyncio.to_thread(manager.remove_container, req.protocol)
@@ -5436,6 +5453,7 @@ CONTAINER_NAMES = {
     'telemt': 'telemt',
     'dns': 'amnezia-dns',
     'wireguard': 'amnezia-wireguard',
+    'wireguardto': 'amnezia-awg',
     'socks5': 'amnezia-socks5proxy',
     'adguard': 'amnezia-adguard',
     'nginx': 'amnezia-nginx',
