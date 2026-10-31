@@ -2398,6 +2398,7 @@ class InstallProtocolRequest(BaseModel):
     protocol: str = 'awg'
     port: str = '55424'
     install_another: Optional[bool] = False
+    wireguardto_awg_protocol: Optional[str] = None
     tls_emulation: Optional[bool] = None
     tls_domain: Optional[str] = None
     max_connections: Optional[int] = None
@@ -4762,9 +4763,17 @@ async def api_install_protocol(request: Request, server_id: int, req: InstallPro
         elif install_base == 'xray':
             install_args = ()
             install_kwargs = dict(port=req.port)
-        elif install_base in ('wireguard', 'wireguardto'):
+        elif install_base == 'wireguardto':
+            if req.wireguardto_awg_protocol not in AWG_PROTOCOLS:
+                return JSONResponse({'error': 'Choose an AmneziaWG instance for WireGuardTo'}, status_code=400)
             install_args = ()
-            install_kwargs = dict(port=req.port or ('51821' if install_base == 'wireguardto' else None))
+            install_kwargs = dict(
+                port=req.port or '51821',
+                awg_protocol=req.wireguardto_awg_protocol,
+            )
+        elif install_base == 'wireguard':
+            install_args = ()
+            install_kwargs = dict(port=req.port or None)
         elif install_base == 'socks5':
             install_args = ()
             install_kwargs = dict(
@@ -4844,6 +4853,8 @@ async def api_install_protocol(request: Request, server_id: int, req: InstallPro
             proto_record['domain'] = result.get('domain')
             proto_record['email'] = result.get('email')
             proto_record['site_url'] = result.get('site_url')
+        if install_base == 'wireguardto':
+            proto_record['awg_protocol'] = result.get('awg_protocol') or req.wireguardto_awg_protocol
         if install_base == 'exit':
             # req.port may be empty: the manager applied the default
             proto_record['port'] = result.get('port') or req.port
