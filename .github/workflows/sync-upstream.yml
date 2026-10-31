@@ -1,0 +1,56 @@
+name: Sync upstream and propose BW update
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/PRVTPRO/Amnezia-Web-Panel.git
+          git fetch upstream main
+
+      - name: Merge upstream into main
+        run: |
+          git merge --no-edit upstream/main
+          git push origin HEAD:main
+
+      - name: Create or update PR into BW
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          existing_pr="$(gh pr list --base BW --head main --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$existing_pr" ]; then
+            gh pr create \
+              --base BW \
+              --head main \
+              --title "Sync upstream main into BW" \
+              --body "Автоматическое предложение обновлений из upstream `PRVTPRO/Amnezia-Web-Panel:main`.
+
+          Проверьте изменения и конфликты перед слиянием. Ветка BW не изменяется автоматически."
+          else
+            echo "An open PR already exists: #$existing_pr. It will update automatically with the new main commits."
+          fi
