@@ -882,6 +882,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
                 <option value="xray">Xray</option>
                 <option value="telemt">Telemt</option>
                 <option value="wireguard">WireGuard</option>
+                <option value="wireguardto">WireGuardTo</option>
             </select>
             <button class="btn btn-primary btn-sm" onclick="openAddConnectionModal()">
                 <span>＋</span> {{ _('add') }}
@@ -1731,6 +1732,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
         { proto: 'xray', category: 'protocols', icon: '⚡', title: 'Xray (VLESS-Reality)', descKey: 'xray_desc' },
         { proto: 'telemt', category: 'protocols', icon: '✈', title: 'Telemt (Telegram Proxy)', descKey: 'telemt_desc' },
         { proto: 'wireguard', category: 'protocols', icon: '🔒', title: 'WireGuard', descKey: 'wireguard_desc' },
+        { proto: 'wireguardto', category: 'protocols', icon: '↗️', title: 'WireGuardTo', descKey: 'wireguard_desc' },
         { proto: 'dns', category: 'services', icon: '🔍', title: 'AmneziaDNS', descKey: 'dns_desc' },
         { proto: 'adguard', category: 'services', icon: '🛡️', title: 'AdGuard Home', descKey: 'adguard_desc' },
         { proto: 'socks5', category: 'services', icon: '🧦', title: 'SOCKS5 Proxy', descKey: 'socks5_desc' },
@@ -1766,7 +1768,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
     const EXIT_LINK_PROTOCOLS = [...AWG_PROTOCOLS, 'wireguard'];
     // Protocols that hand out a client config or link, and therefore have an
     // address a client dials.
-    const ENDPOINT_PROTOCOLS = [...AWG_PROTOCOLS, 'wireguard', 'xray', 'telemt'];
+    const ENDPOINT_PROTOCOLS = [...AWG_PROTOCOLS, 'wireguard', 'wireguardto', 'xray', 'telemt'];
     const SPECIAL_JUNK_KEYS = ['i1', 'i2', 'i3', 'i4', 'i5'];
     // Same value the desktop client ships as its default I1.
     const AWG_DEFAULT_I1 = '<r 2><b 0x858000010001000000000669636c6f756403636f6d0000010001c00c000100010000105a00044d583737>';
@@ -1817,7 +1819,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
     // ---- Used-port awareness for the install modal ----
     // Fetches real listening ports from the server (not just same-family
     // protocol records) so the suggested port is actually free.
-    const UDP_INSTALL_PROTOS = new Set(['awg', 'awg2', 'awg3', 'awg_legacy', 'wireguard', 'exit']);
+    const UDP_INSTALL_PROTOS = new Set(['awg', 'awg2', 'awg3', 'awg_legacy', 'wireguard', 'wireguardto', 'exit']);
     const SKIP_PORT_CHECK = new Set(['dns', 'adguard']); // internal bindings
     window.usedPorts = { ts: 0, udp: {}, tcp: {} };
 
@@ -2191,6 +2193,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
             case 'xray': title = 'Xray'; break;
             case 'telemt': title = 'Telemt'; break;
             case 'wireguard': title = 'WireGuard'; break;
+            case 'wireguardto': title = 'WireGuardTo'; break;
             case 'dns': title = 'AmneziaDNS'; break;
             case 'socks5': title = 'SOCKS5 Proxy'; break;
             case 'adguard': title = 'AdGuard Home'; break;
@@ -2272,7 +2275,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
 
                 for (const [proto, info] of orderedProtocolEntries(data.protocols)) {
                     updateProtocolCard(proto, info);
-                    const isVPN = ['awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'wireguard'].includes(protoBase(proto));
+                    const isVPN = ['awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'wireguard', 'wireguardto'].includes(protoBase(proto));
                     if (info.container_running && isVPN) {
                         const opt = document.createElement('option');
                         opt.value = proto;
@@ -4677,7 +4680,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
         clone.querySelectorAll('.client-ip, .client-endpoint').forEach(el => el.remove());
         const oldName = clone.textContent.trim();
         const proto = document.getElementById('connProtoSelect').value;
-        const isAwg = proto.startsWith('awg') || protoBase(proto) === 'wireguard';
+        const isAwg = proto.startsWith('awg') || ['wireguard', 'wireguardto'].includes(protoBase(proto));
         const curSpeed = item.dataset.maxspeed || '0';
         const currentAssigned = item.dataset.assignedUser || '';
         nameEl.innerHTML = `
@@ -4835,7 +4838,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
     async function showConnectionConfig(clientId, connName, hasKey) {
         const proto = document.getElementById('connProtoSelect').value;
         currentConfigClientId = clientId;
-        const canEditCfg = ['awg', 'awg2', 'awg_legacy', 'wireguard'].includes(protoBase(proto));
+        const canEditCfg = ['awg', 'awg2', 'awg_legacy', 'wireguard', 'wireguardto'].includes(protoBase(proto));
         document.getElementById('saveConnConfigBtn').style.display = canEditCfg ? '' : 'none';
         document.getElementById('configText').readOnly = !canEditCfg;
 
