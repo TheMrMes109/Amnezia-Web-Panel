@@ -236,6 +236,11 @@ WantedBy=timers.target
         )
         if code != 0:
             raise RuntimeError(err or out or "Could not install standard WireGuard tools in AWG container")
+        out, err, code = self.ssh.run_sudo_command(
+            f"docker exec {shlex.quote(self.CONTAINER_NAME)} mkdir -p {WGTO_DIR}"
+        )
+        if code != 0:
+            raise RuntimeError(err or out or "Could not create WireGuardTo state directory")
         private_key, public_key = generate_wg_keypair()
         psk = generate_psk()
         config = f"""[Interface]
