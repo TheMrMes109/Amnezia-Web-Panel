@@ -1075,7 +1075,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
                     <label class="form-label">AmneziaWG для перенаправления</label>
                     <select class="form-input" id="installWireGuardToAwg">
                         {% for proto, info in server.get('protocols', {}).items() %}
-                        {% if proto.split('__')[0] in ['awg', 'awg2', 'awg3', 'awg_legacy'] and info.get('installed', True) and info.get('exit_link') %}
+                        {% if proto in ['awg', 'awg2', 'awg3', 'awg_legacy'] and info.get('installed', True) and info.get('exit_link') %}
                         <option value="{{ proto }}">{{ info.get('display_name', proto) }} — {{ proto }}</option>
                         {% endif %}
                         {% endfor %}
