@@ -1847,10 +1847,28 @@ fi
             self._userspace_guard(protocol_type),
             subnet_default,
             self._bwlimits_path(),
-            pre_blocks=(functions + '[ -f "$EXIT_CONF" ] && x_killswitch_on\n',),
+            pre_blocks=(functions + '[ -f "$EXIT_CONF" ] && x_killswitch_on\n'
+                    + 'if [ -f /opt/amnezia/wireguardto/wgto0.conf ]; then\n'
+                    + '  ip -4 route replace blackhole default metric 1000 table 201\n'
+                    + '  while ip -4 rule del pref 180 from 10.77.77.0/24 table 201 2>/dev/null; do :; done\n'
+                    + '  ip -4 rule add pref 180 from 10.77.77.0/24 table 201\n'
+                    + 'fi\n',),
             extra_blocks=('# ---- Exit-node link: bring it up now that the client tunnel exists ----\n'
                           'if [ -f "$EXIT_CONF" ]; then x_link_up || echo "! exit link not applied, clients stay on the kill-switch"; fi\n',
-                          warp_egress),
+                          warp_egress,
+                          '# ---- WireGuardTo: standard WG peers use Exit Link table 201 ----\n'
+                          + 'WGTO_CONF=/opt/amnezia/wireguardto/wgto0.conf\n'
+                          + 'if [ -f "$WGTO_CONF" ]; then\n'
+                          + '  wg-quick down "$WGTO_CONF" 2>/dev/null || true\n'
+                          + '  wg-quick up "$WGTO_CONF" || echo "! WireGuardTo failed to start; source subnet stays blackholed"\n'
+                          + '  iptables -C INPUT -i wgto0 -j ACCEPT 2>/dev/null || iptables -A INPUT -i wgto0 -j ACCEPT\n'
+                          + '  iptables -C FORWARD -i wgto0 -o exit0 -s 10.77.77.0/24 -j ACCEPT 2>/dev/null || iptables -A FORWARD -i wgto0 -o exit0 -s 10.77.77.0/24 -j ACCEPT\n'
+                          + '  iptables -t nat -C POSTROUTING -s 10.77.77.0/24 -o exit0 -j MASQUERADE 2>/dev/null || iptables -t nat -A POSTROUTING -s 10.77.77.0/24 -o exit0 -j MASQUERADE\n'
+                          + '  ip6tables -C FORWARD -i wgto0 -j DROP 2>/dev/null || ip6tables -I FORWARD 1 -i wgto0 -j DROP\n'
+                          + '  while ip -6 rule del pref 180 iif wgto0 prohibit 2>/dev/null; do :; done\n'
+                          + '  ip -6 rule add pref 180 iif wgto0 prohibit 2>/dev/null || true\n'
+                          + '  if ip link show exit0 >/dev/null 2>&1; then ip -4 route replace default dev exit0 metric 10 table 201; else ip -4 route replace blackhole default metric 1000 table 201; fi\n'
+                          + 'fi'),
         )
 
     def _write_start_script(self, protocol_type, config_path=None):
@@ -1892,6 +1910,10 @@ x_killswitch_on() {
   # exit0 is up that table holds only a blackhole, so nothing falls through
   # to eth0 - this runs before the client tunnel comes up on purpose.
   ip -4 route replace blackhole default metric 1000 table $EXIT_TABLE
+  if [ -f /opt/amnezia/wireguardto/wgto0.conf ]; then
+    ip -4 route replace blackhole default metric 1000 table 201
+    x_rule -4 180 from 10.77.77.0/24 lookup 201
+  fi
   x_rule -4 190 from $X_SUBNET to $X_SUBNET lookup main
   if grep -qs '^# DnsViaExit = on' "$EXIT_CONF"; then x_unrule -4 191
   else x_rule -4 191 from $X_SUBNET to $DNS_NET lookup main; fi
@@ -1907,6 +1929,14 @@ x_killswitch_off() {
   for p in 190 191 $EXIT_PREF; do x_unrule -4 $p; x_unrule -6 $p; done
   ip -4 route flush table $EXIT_TABLE 2>/dev/null
   ip -6 route flush table $EXIT_TABLE 2>/dev/null
+  if [ -f /opt/amnezia/wireguardto/wgto0.conf ]; then
+    x_unrule -4 180
+    x_rule -4 180 from 10.77.77.0/24 lookup 201
+    ip -4 route replace blackhole default metric 1000 table 201
+  else
+    x_unrule -4 180
+    ip -4 route flush table 201 2>/dev/null
+  fi
 }
 x_link_up() {
   $X_QUICK down $EXIT_CONF 2>/dev/null
@@ -1919,6 +1949,12 @@ x_link_up() {
   # lookup resolve to another exitN.
   sysctl -w net.ipv4.conf.$EXIT_IF.rp_filter=2 >/dev/null 2>&1 || true
   ip -4 route replace default dev $EXIT_IF table $EXIT_TABLE
+  if [ -f /opt/amnezia/wireguardto/wgto0.conf ]; then
+    ip -4 route replace default dev $EXIT_IF metric 10 table 201
+    x_ipt_add filter FORWARD -i wgto0 -o $EXIT_IF -s 10.77.77.0/24 -j ACCEPT
+    x_ipt_add nat POSTROUTING -s 10.77.77.0/24 -o $EXIT_IF -j MASQUERADE
+    if command -v conntrack >/dev/null 2>&1; then conntrack -D -s 10.77.77.0/24 >/dev/null 2>&1; fi
+  fi
   x_ipt_add filter FORWARD -i $X_IFACE -o $EXIT_IF -s $X_SUBNET -j ACCEPT
   # SNAT clients into this node's transit address: the exit sees one /32 per entry
   x_ipt_add nat POSTROUTING -s $X_SUBNET -o $EXIT_IF -j MASQUERADE
@@ -1942,6 +1978,12 @@ x_link_down() {
   # it (device notifier) and the table keeps blackholing until the rules go.
   [ -f "$EXIT_CONF" ] && $X_QUICK down $EXIT_CONF 2>/dev/null
   ip link del $EXIT_IF 2>/dev/null
+  x_ipt_del filter FORWARD -i wgto0 -o $EXIT_IF -s 10.77.77.0/24 -j ACCEPT
+  x_ipt_del nat POSTROUTING -s 10.77.77.0/24 -o $EXIT_IF -j MASQUERADE
+  if [ -f /opt/amnezia/wireguardto/wgto0.conf ]; then
+    ip -4 route replace blackhole default metric 1000 table 201
+    x_rule -4 180 from 10.77.77.0/24 lookup 201
+  fi
   x_ipt_del filter FORWARD -i $X_IFACE -o $EXIT_IF -s $X_SUBNET -j ACCEPT
   x_ipt_del nat POSTROUTING -s $X_SUBNET -o $EXIT_IF -j MASQUERADE
   x_ipt_del mangle FORWARD -o $EXIT_IF -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
