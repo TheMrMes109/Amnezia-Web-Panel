@@ -533,6 +533,30 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
         </div>
     </div>
 
+    <!-- WireGuardTo Card: standard WireGuard clients routed through the AWG Exit Link. -->
+    <div class="card card-hover protocol-card protocol-wireguardto" id="proto-wireguardto">
+        <div class="protocol-card-head">
+            <div class="protocol-icon">↗️</div>
+            <div class="protocol-name">WireGuardTo</div>
+        </div>
+        <div class="flex gap-sm protocol-ctrl" id="wireguardto-ctrl" style="display:none!important;"></div>
+        <div class="protocol-desc">
+            Перенаправляет трафик обычных WireGuard-клиентов через AmneziaWG. Подходит для роутеров и старых устройств, которые не поддерживают AmneziaWG.
+        </div>
+        <div class="protocol-status" id="wireguardto-status">
+            <span class="badge badge-warn"><span class="badge-dot"></span> {{ _('not_checked') }}</span>
+        </div>
+        <div id="wireguardto-info" class="hidden">
+            <div class="protocol-info" id="wireguardto-info-grid"></div>
+        </div>
+        <div class="flex gap-sm" id="wireguardto-actions">
+            <button class="btn btn-primary btn-sm" onclick="openInstallModal('wireguardto')" id="wireguardto-install-btn"
+                style="flex:1">
+                {{ _('install') }}
+            </button>
+        </div>
+    </div>
+
     <!-- ===== AIVPN teaser (locked, full grid width) ===== -->
     <div class="promo-block promo-aivpn" aria-disabled="true" role="article">
         <div class="promo-orbs" aria-hidden="true">
