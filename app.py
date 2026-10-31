@@ -1410,6 +1410,7 @@ def protocol_short_name(protocol: str, header_protection=False) -> str:
         'awg3': 'AWG3',
         'awg_legacy': 'AWG-Legacy',
         'wireguard': 'WG',
+        'wireguardto': 'WGTo',
         'xray': 'Xray',
         'telemt': 'Telemt',
         'socks5': 'SOCKS5',
@@ -3086,7 +3087,7 @@ def _scrape_server_traffic(server, sid, my_conns):
         # Query each physical scope once, retaining each link's full protocol.
         scopes = {}
         for proto, record in server.get('protocols', {}).items():
-            if (str(proto).split('__', 1)[0] in ('awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'wireguard')
+            if (str(proto).split('__', 1)[0] in ('awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'wireguard', 'wireguardto')
                     and isinstance(record, dict) and record.get('installed', True)):
                 scopes.setdefault(_protocol_scope(proto), proto)
         owners = Counter((_protocol_scope(c['protocol']), c['client_id']) for c in my_conns)
@@ -3095,7 +3096,7 @@ def _scrape_server_traffic(server, sid, my_conns):
                 manager = get_protocol_manager(ssh, proto)
                 observed_at = time.time()
                 epoch = None
-                if scope[0] in ('awg', 'awg2', 'awg3', 'awg_legacy', 'wireguard'):
+                if scope[0] in ('awg', 'awg2', 'awg3', 'awg_legacy', 'wireguard', 'wireguardto'):
                     snapshot = _manager_call(manager, 'get_traffic_snapshot', proto)
                     epoch, peer_counters = snapshot['epoch'], snapshot['peers']
                     if not isinstance(epoch, str) or not epoch:
@@ -4560,7 +4561,7 @@ def api_check_server(request: Request, server_id: int):
                         'base_protocol': protocol_base(proto),
                         'instance': protocol_instance(proto),
                         'display_name': protocol_display_name(proto, result.get('header_protection')),
-                        'container_name': protocol_container_name(proto),
+                        'container_name': result.get('container_name') or protocol_container_name(proto),
                     }
                     if protocol_base(proto) == 'adguard':
                         server['protocols'][proto].update({
@@ -5774,9 +5775,8 @@ def api_server_config(request: Request, server_id: int, req: ProtocolRequest):
             from managers.telemt_manager import TelemtManager
             mgr = TelemtManager(ssh, req.protocol)
             config = mgr._get_server_config()
-        elif protocol_base(req.protocol) == 'wireguard':
-            from managers.wireguard_manager import WireGuardManager
-            mgr = WireGuardManager(ssh)
+        elif protocol_base(req.protocol) in ('wireguard', 'wireguardto'):
+            mgr = get_protocol_manager(ssh, req.protocol)
             config = mgr._get_server_config()
         elif protocol_base(req.protocol) == 'nginx':
             from managers.nginx_manager import NginxManager
@@ -6345,9 +6345,8 @@ def api_server_config_save(request: Request, server_id: int, req: ServerConfigSa
             from managers.telemt_manager import TelemtManager
             mgr = TelemtManager(ssh, req.protocol)
             mgr.save_server_config(req.protocol, req.config)
-        elif protocol_base(req.protocol) == 'wireguard':
-            from managers.wireguard_manager import WireGuardManager
-            mgr = WireGuardManager(ssh)
+        elif protocol_base(req.protocol) in ('wireguard', 'wireguardto'):
+            mgr = get_protocol_manager(ssh, req.protocol)
             mgr.save_server_config(req.config)
         elif protocol_base(req.protocol) == 'nginx':
             from managers.nginx_manager import NginxManager
@@ -6477,7 +6476,7 @@ def api_add_connection(request: Request, server_id: int, req: AddConnectionReque
                 user_ad_tag=req.telemt_ad_tag,
                 max_tcp_conns=req.telemt_max_conns
             )
-        elif protocol_base(req.protocol) == 'wireguard':
+        elif protocol_base(req.protocol) in ('wireguard', 'wireguardto'):
             result = manager.add_client(req.name, pub_host, public_port=pub_port)
         else:
             result = manager.add_client(req.protocol, req.name, pub_host, port, public_port=pub_port)
