@@ -84,6 +84,11 @@ class WireGuardToManager(WireGuardManager):
         )
         return code == 0
 
+    def get_server_status(self):
+        info = super().get_server_status()
+        info["container_name"] = self.CONTAINER_NAME
+        return info
+
     def _put_file(self, content, remote_tmp, destination):
         self.ssh.upload_file(content, remote_tmp)
         out, err, code = self.ssh.run_sudo_command(
