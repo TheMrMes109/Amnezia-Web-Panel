@@ -1069,6 +1069,21 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
                 <div class="form-hint" id="installPortHint">{{ _('port_default_hint') }}</div>
             </div>
 
+            <div id="wireguardtoOptions"
+                style="display:none; padding: var(--space-md); background: rgba(0,0,0,0.03); border-radius: var(--radius-md); margin-bottom: var(--space-md);">
+                <div class="form-group">
+                    <label class="form-label">AmneziaWG для перенаправления</label>
+                    <select class="form-input" id="installWireGuardToAwg">
+                        {% for proto, info in server.get('protocols', {}).items() %}
+                        {% if proto.split('__')[0] in ['awg', 'awg2', 'awg3', 'awg_legacy'] and info.get('installed', True) and info.get('exit_link') %}
+                        <option value="{{ proto }}">{{ info.get('display_name', proto) }} — {{ proto }}</option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                    <div class="form-hint">Выберите экземпляр AmneziaWG на этом сервере с подключённым Exit Node. Весь трафик WireGuardTo пойдёт через его Exit Link.</div>
+                </div>
+            </div>
+
             <div id="awgOptions"
                 style="display:none; padding: var(--space-md); background: rgba(0,0,0,0.03); border-radius: var(--radius-md); margin-bottom: var(--space-md);">
                 <div class="form-row">
@@ -3175,6 +3190,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
         const adguardOpts = document.getElementById('adguardOptions');
         const nginxOpts = document.getElementById('nginxOptions');
         const awgOpts = document.getElementById('awgOptions');
+        const wireguardtoOpts = document.getElementById('wireguardtoOptions');
         const exitOpts = document.getElementById('exitOptions');
 
         telemtOpts.style.display = 'none';
@@ -3182,6 +3198,7 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
         adguardOpts.style.display = 'none';
         nginxOpts.style.display = 'none';
         awgOpts.style.display = 'none';
+        wireguardtoOpts.style.display = 'none';
         exitOpts.style.display = 'none';
 
         if (base === 'dns') {
@@ -3230,6 +3247,11 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
             portInput.value = '51821';
             portInput.disabled = false;
             portHint.textContent = _('port_default_hint');
+            wireguardtoOpts.style.display = 'block';
+            const target = document.getElementById('installWireGuardToAwg');
+            if (target && target.options.length === 0) {
+                target.innerHTML = '<option value="">Нет установленных AmneziaWG с активным Exit Link</option>';
+            }
         } else {
             portLabel.textContent = _('port') + ' (UDP)';
             portInput.value = currentInstallAnother ? nextSuggestedPort(currentInstallProto, 55424) : '55424';
@@ -3327,6 +3349,13 @@ document.addEventListener('DOMContentLoaded', loadServerWarpEgress);
             const params = {
                 protocol: currentInstallProto, port: port, install_another: currentInstallAnother,
             };
+            if (protoBase(currentInstallProto) === 'wireguardto') {
+                const targetAwg = document.getElementById('installWireGuardToAwg');
+                if (!targetAwg || !targetAwg.value) {
+                    throw new Error('Сначала подключите Exit Node к нужному экземпляру AmneziaWG и выберите его.');
+                }
+                params.wireguardto_awg_protocol = targetAwg.value;
+            }
             if (protoBase(currentInstallProto) === 'telemt') {
                 params.tls_emulation = document.getElementById('installTelemtTls').checked;
                 params.tls_domain = document.getElementById('installTelemtDomain').value;
