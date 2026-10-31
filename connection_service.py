@@ -12,7 +12,7 @@ DISALLOWED_CONNECTION_NAME_CHARS = set('<>"\'&')
 logger = logging.getLogger(__name__)
 
 SELF_SERVICE_PROTOCOL_ORDER = (
-    'awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'wireguard',
+    'awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'wireguard', 'wireguardto',
 )
 
 SELF_SERVICE_PROTOCOLS = frozenset(SELF_SERVICE_PROTOCOL_ORDER)
@@ -25,6 +25,7 @@ _PROTOCOL_DISPLAY_NAMES = {
     'xray': 'Xray',
     'telemt': 'Telemt',
     'wireguard': 'WireGuard',
+    'wireguardto': 'WireGuardTo',
 }
 
 
