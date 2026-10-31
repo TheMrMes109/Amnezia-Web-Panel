@@ -29,7 +29,7 @@ def _protocol_scope(protocol):
     parts = str(protocol or 'awg').split('__', 1)
     base = parts[0]
     multi = {'awg', 'awg2', 'awg3', 'awg_legacy', 'xray', 'telemt', 'socks5'}
-    single = {'wireguard', 'dns', 'adguard', 'nginx', 'exit'}
+    single = {'wireguard', 'wireguardto', 'dns', 'adguard', 'nginx', 'exit'}
     if base not in multi | single:
         base = 'awg'  # Matches the manager dispatcher's AWG fallback.
     try:
