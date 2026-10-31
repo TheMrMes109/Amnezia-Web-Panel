@@ -127,7 +127,7 @@ class WireGuardToManager(WireGuardManager):
         result = super().add_client(client_name, server_host, public_port=public_port)
         result["config"] = result["config"].replace(
             "AllowedIPs = 0.0.0.0/0, ::/0", "AllowedIPs = 0.0.0.0/0"
-        )
+        ).replace("MTU = 1420", "MTU = 1280")
         return result
 
     def get_client_config(self, client_id, server_host, port=None, public_port=None):
@@ -135,7 +135,7 @@ class WireGuardToManager(WireGuardManager):
             client_id, server_host, port=port, public_port=public_port
         )
         return config.replace("AllowedIPs = 0.0.0.0/0, ::/0",
-                              "AllowedIPs = 0.0.0.0/0")
+                              "AllowedIPs = 0.0.0.0/0").replace("MTU = 1420", "MTU = 1280")
 
     def _write_awg_start_script(self):
         awg = AWGManager(self.ssh)
